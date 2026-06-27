@@ -1,0 +1,8 @@
+name: ci
+on: [pull_request, push]
+jobs:
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose config -q
