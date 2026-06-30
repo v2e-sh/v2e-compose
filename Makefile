@@ -39,10 +39,10 @@ prod:
 
 down:
 	-$(COMPOSE) $(WHOAMI) down
-	-$(COMPOSE) $(TRAEFIK) down
+	-CF_DNS_API_TOKEN=unused $(COMPOSE) $(TRAEFIK) down
 
 logs:
-	$(COMPOSE) $(TRAEFIK) logs -f traefik
+	CF_DNS_API_TOKEN=unused $(COMPOSE) $(TRAEFIK) logs -f traefik
 
 validate:
 	@DOMAIN=example.com ACME_EMAIL=a@b.c CERT_RESOLVER=staging CF_DNS_API_TOKEN=dummy \
