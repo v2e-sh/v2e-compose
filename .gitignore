@@ -1,0 +1,12 @@
+# Local non-secret config (commit .env.example instead)
+.env
+
+# The real encrypted secrets file (commit secrets.sops.yaml.example instead).
+# SOPS files are safe to commit, but we follow the v2e "supply your own locally" model.
+secrets.sops.yaml
+
+# ACME storage + any cert material — contains cert private keys. Keep only the dir.
+traefik/data/certs/*
+!traefik/data/certs/.gitkeep
+
+.DS_Store
