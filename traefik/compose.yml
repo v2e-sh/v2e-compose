@@ -1,0 +1,59 @@
+services:
+  traefik:
+    image: traefik:v3.7.6
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - frontend
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # The one secret. Sourced from the process env: `sops exec-env` (automation/`make`)
+      # or a local export. NOT placed in .env. lego reads it for the DNS-01 challenge.
+      - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN:?set via `make up` (sops exec-env) or a local export}
+    command:
+      - --global.checkNewVersion=false
+      - --global.sendAnonymousUsage=false
+      - --log.level=INFO
+      - --ping=true
+      - --providers.docker=true
+      - --providers.docker.exposedByDefault=false
+      - --providers.docker.network=frontend
+      - --entryPoints.web.address=:80
+      - --entryPoints.web.http.redirections.entryPoint.to=websecure
+      - --entryPoints.web.http.redirections.entryPoint.scheme=https
+      - --entryPoints.websecure.address=:443
+      # --- staging resolver ---
+      - --certificatesResolvers.staging.acme.email=${ACME_EMAIL}
+      - --certificatesResolvers.staging.acme.storage=/certs/acme-staging.json
+      - --certificatesResolvers.staging.acme.caServer=https://acme-staging-v02.api.letsencrypt.org/directory
+      - --certificatesResolvers.staging.acme.dnsChallenge.provider=cloudflare
+      - --certificatesResolvers.staging.acme.dnsChallenge.resolvers=1.1.1.1:53,1.0.0.1:53
+      # --- production resolver ---
+      - --certificatesResolvers.production.acme.email=${ACME_EMAIL}
+      - --certificatesResolvers.production.acme.storage=/certs/acme.json
+      - --certificatesResolvers.production.acme.caServer=https://acme-v02.api.letsencrypt.org/directory
+      - --certificatesResolvers.production.acme.dnsChallenge.provider=cloudflare
+      - --certificatesResolvers.production.acme.dnsChallenge.resolvers=1.1.1.1:53,1.0.0.1:53
+    volumes:
+      - ./data/certs:/certs
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels:
+      - traefik.enable=true
+      # Reusable security-headers middleware. HSTS deliberately omitted until prod cert
+      # (HSTS + a staging cert makes the untrusted-cert error un-bypassable).
+      - traefik.http.middlewares.secure-headers.headers.frameDeny=true
+      - traefik.http.middlewares.secure-headers.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.secure-headers.headers.browserXssFilter=true
+      - traefik.http.middlewares.secure-headers.headers.referrerPolicy=strict-origin-when-cross-origin
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+networks:
+  frontend:
+    external: true
