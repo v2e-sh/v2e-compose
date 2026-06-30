@@ -1,0 +1,7 @@
+# SOPS creation rule for v2e-compose secrets.
+# Replace the age recipient with YOUR age PUBLIC key (starts with `age1`).
+# Public keys are safe to commit. Get yours with:
+#   age-keygen -y ~/.config/sops/age/keys.txt
+creation_rules:
+  - path_regex: secrets\.sops\.ya?ml$
+    age: "age1replacewithyourpublickeyxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
