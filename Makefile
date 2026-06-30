@@ -39,7 +39,7 @@ prod:
 
 down:
 	-$(COMPOSE) $(WHOAMI) down
-	-sops exec-env $(SECRETS) '$(COMPOSE) $(TRAEFIK) down'
+	-$(COMPOSE) $(TRAEFIK) down
 
 logs:
 	$(COMPOSE) $(TRAEFIK) logs -f traefik
