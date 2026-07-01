@@ -30,12 +30,17 @@ services:
       - --certificatesResolvers.staging.acme.caServer=https://acme-staging-v02.api.letsencrypt.org/directory
       - --certificatesResolvers.staging.acme.dnsChallenge.provider=cloudflare
       - --certificatesResolvers.staging.acme.dnsChallenge.resolvers=1.1.1.1:53,1.0.0.1:53
+      # Skip lego's own propagation self-check: Cloudflare negative-caches the NXDOMAIN
+      # for _acme-challenge (SOA min TTL 1800s) so the 1.1.1.1 self-check times out even
+      # though the TXT exists. Let LE query the authoritative NS directly instead.
+      - --certificatesResolvers.staging.acme.dnsChallenge.disablePropagationCheck=true
       # --- production resolver ---
       - --certificatesResolvers.production.acme.email=${ACME_EMAIL}
       - --certificatesResolvers.production.acme.storage=/certs/acme.json
       - --certificatesResolvers.production.acme.caServer=https://acme-v02.api.letsencrypt.org/directory
       - --certificatesResolvers.production.acme.dnsChallenge.provider=cloudflare
       - --certificatesResolvers.production.acme.dnsChallenge.resolvers=1.1.1.1:53,1.0.0.1:53
+      - --certificatesResolvers.production.acme.dnsChallenge.disablePropagationCheck=true
     volumes:
       - ./data/certs:/certs
       - /var/run/docker.sock:/var/run/docker.sock:ro
