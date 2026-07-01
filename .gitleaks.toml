@@ -1,0 +1,10 @@
+title = "v2e gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Example/placeholder files carry dummy values, not real secrets"
+paths = [
+  '''.*\.example$''',
+]
