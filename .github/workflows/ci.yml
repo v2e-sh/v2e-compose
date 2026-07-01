@@ -5,4 +5,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker compose config -q
+      # Per-stack compose files (no root compose.yml). Dummy env satisfies the
+      # ${VAR}/${VAR:?} interpolation; `config -q` validates without a daemon.
+      - run: |
+          DOMAIN=example.com ACME_EMAIL=a@b.c CERT_RESOLVER=staging CF_DNS_API_TOKEN=dummy \
+            docker compose -f traefik/compose.yml config -q
+          DOMAIN=example.com CERT_RESOLVER=staging \
+            docker compose -f whoami/compose.yml config -q
