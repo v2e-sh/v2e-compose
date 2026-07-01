@@ -1,5 +1,8 @@
 name: ci
-on: [pull_request, push]
+on:
+  pull_request:
+  push:
+    branches: [main]
 jobs:
   compose:
     runs-on: ubuntu-latest
@@ -12,3 +15,14 @@ jobs:
             docker compose -f traefik/compose.yml config -q
           DOMAIN=example.com CERT_RESOLVER=staging \
             docker compose -f whoami/compose.yml config -q
+
+  # Blocking: repo is currently secret-free; keep it that way.
+  # --only-verified will not flag the placeholder values in *.example files.
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: TruffleHog
+        run: |
+          docker run --rm -v "$PWD:/repo" trufflesecurity/trufflehog:latest \
+            filesystem /repo --only-verified --fail
