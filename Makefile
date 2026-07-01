@@ -1,4 +1,4 @@
-# v2e-compose — local bootstrap & operations for the Traefik + TLS stack.
+# v2e-compose — local bootstrap & operations for the Traefik + TLS + auth stack.
 # LOCAL/standalone front door only. The automated lab path is
 # `terraform apply` -> Ansible -> ANS-3 (docker_compose_v2); make is not involved there.
 
@@ -7,6 +7,7 @@ COMPOSE  := docker compose
 ENVFILE  := .env
 SECRETS  := secrets.sops.yaml
 TRAEFIK  := -f traefik/compose.yml
+TINYAUTH := -f tinyauth/compose.yml
 WHOAMI   := -f whoami/compose.yml
 
 .DEFAULT_GOAL := help
@@ -24,21 +25,25 @@ bootstrap:
 			echo "No age key found. Run age-keygen first (see README)."; exit 1; \
 		fi; \
 		sops --encrypt secrets.sops.yaml.example > $(SECRETS); \
-		echo "created $(SECRETS) — opening editor to set the real token"; \
+		echo "created $(SECRETS) — set CF_DNS_API_TOKEN"; \
+		echo "  and TINYAUTH_AUTH_USERS (docker run --rm -it ghcr.io/steveiliop56/tinyauth:v5.0.7 user create)"; \
 		sops $(SECRETS); \
 	fi
 	@echo "bootstrap done. Next: edit .env, then 'make up'"
 
 up:
 	sops exec-env $(SECRETS) '$(COMPOSE) --env-file $(ENVFILE) $(TRAEFIK) up -d'
+	sops exec-env $(SECRETS) '$(COMPOSE) --env-file $(ENVFILE) $(TINYAUTH) up -d'
 	$(COMPOSE) --env-file $(ENVFILE) $(WHOAMI) up -d
 
 prod:
 	sops exec-env $(SECRETS) 'CERT_RESOLVER=production $(COMPOSE) --env-file $(ENVFILE) $(TRAEFIK) up -d'
+	sops exec-env $(SECRETS) '$(COMPOSE) --env-file $(ENVFILE) $(TINYAUTH) up -d'
 	CERT_RESOLVER=production $(COMPOSE) --env-file $(ENVFILE) $(WHOAMI) up -d
 
 down:
 	-$(COMPOSE) $(WHOAMI) down
+	-TINYAUTH_AUTH_USERS=unused $(COMPOSE) $(TINYAUTH) down
 	-CF_DNS_API_TOKEN=unused $(COMPOSE) $(TRAEFIK) down
 
 logs:
@@ -47,5 +52,7 @@ logs:
 validate:
 	@DOMAIN=example.com ACME_EMAIL=a@b.c CERT_RESOLVER=staging CF_DNS_API_TOKEN=dummy \
 		$(COMPOSE) $(TRAEFIK) config >/dev/null && echo "traefik/compose.yml OK"
+	@DOMAIN=example.com TINYAUTH_AUTH_USERS=dummy \
+		$(COMPOSE) $(TINYAUTH) config >/dev/null && echo "tinyauth/compose.yml OK"
 	@DOMAIN=example.com CERT_RESOLVER=staging \
 		$(COMPOSE) $(WHOAMI) config >/dev/null && echo "whoami/compose.yml OK"

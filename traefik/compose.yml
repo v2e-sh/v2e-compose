@@ -10,14 +10,13 @@ services:
       - "80:80"
       - "443:443"
     environment:
-      # The one secret. Sourced from the process env: `sops exec-env` (automation/`make`)
-      # or a local export. NOT placed in .env. lego reads it for the DNS-01 challenge.
       - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN:?set via `make up` (sops exec-env) or a local export}
     command:
       - --global.checkNewVersion=false
       - --global.sendAnonymousUsage=false
       - --log.level=INFO
       - --ping=true
+      - --api.dashboard=true
       - --providers.docker=true
       - --providers.docker.exposedByDefault=false
       - --providers.docker.network=frontend
@@ -42,12 +41,19 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     labels:
       - traefik.enable=true
-      # Reusable security-headers middleware. HSTS deliberately omitted until prod cert
-      # (HSTS + a staging cert makes the untrusted-cert error un-bypassable).
+      # Reusable security-headers middleware (HSTS omitted until prod cert).
       - traefik.http.middlewares.secure-headers.headers.frameDeny=true
       - traefik.http.middlewares.secure-headers.headers.contentTypeNosniff=true
       - traefik.http.middlewares.secure-headers.headers.browserXssFilter=true
       - traefik.http.middlewares.secure-headers.headers.referrerPolicy=strict-origin-when-cross-origin
+      # Dashboard router — PROTECTED, and it now carries the wildcard anchor (moved off whoami).
+      - traefik.http.routers.dashboard.rule=Host(`traefik.${DOMAIN}`)
+      - traefik.http.routers.dashboard.entryPoints=websecure
+      - traefik.http.routers.dashboard.service=api@internal
+      - traefik.http.routers.dashboard.middlewares=auth@docker,secure-headers@docker
+      - traefik.http.routers.dashboard.tls.certResolver=${CERT_RESOLVER:-staging}
+      - traefik.http.routers.dashboard.tls.domains[0].main=${DOMAIN}
+      - traefik.http.routers.dashboard.tls.domains[0].sans=*.${DOMAIN}
     healthcheck:
       test: ["CMD", "traefik", "healthcheck", "--ping"]
       interval: 10s
