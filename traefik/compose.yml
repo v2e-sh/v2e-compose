@@ -29,18 +29,26 @@ services:
       - --certificatesResolvers.staging.acme.storage=/certs/acme-staging.json
       - --certificatesResolvers.staging.acme.caServer=https://acme-staging-v02.api.letsencrypt.org/directory
       - --certificatesResolvers.staging.acme.dnsChallenge.provider=cloudflare
-      - --certificatesResolvers.staging.acme.dnsChallenge.resolvers=1.1.1.1:53,1.0.0.1:53
-      # Skip lego's own propagation self-check: Cloudflare negative-caches the NXDOMAIN
-      # for _acme-challenge (SOA min TTL 1800s) so the 1.1.1.1 self-check times out even
-      # though the TXT exists. Let LE query the authoritative NS directly instead.
-      - --certificatesResolvers.staging.acme.dnsChallenge.disablePropagationCheck=true
+      # DNS-01 propagation: sleep 60s after the Cloudflare API write, then hand straight to
+      # the ACME server (delayBeforeChecks + disableChecks map to lego's PropagationWait).
+      # Do NOT enable local propagation checks on this network: the lab's WAN path runs a
+      # caching transparent DNS interceptor, and lego's own zone lookup queries
+      # _acme-challenge.<domain> a second BEFORE creating the TXT — the interceptor
+      # negative-caches that NXDOMAIN (SOA min TTL 1800s), so every on-node check is
+      # poisoned even while the real authoritative NS serve the record (verified live:
+      # API + both authoritative NS had the TXT while the node saw NXDOMAIN for 120s).
+      # Never pin `resolvers=1.1.1.1` either — same negative-cache trap. The 60s sleep
+      # covers the observed <=10s API->authoritative propagation; Let's Encrypt validates
+      # from its own resolvers, unaffected by lab DNS.
+      - --certificatesResolvers.staging.acme.dnsChallenge.propagation.delayBeforeChecks=60s
+      - --certificatesResolvers.staging.acme.dnsChallenge.propagation.disableChecks=true
       # --- production resolver ---
       - --certificatesResolvers.production.acme.email=${ACME_EMAIL}
       - --certificatesResolvers.production.acme.storage=/certs/acme.json
       - --certificatesResolvers.production.acme.caServer=https://acme-v02.api.letsencrypt.org/directory
       - --certificatesResolvers.production.acme.dnsChallenge.provider=cloudflare
-      - --certificatesResolvers.production.acme.dnsChallenge.resolvers=1.1.1.1:53,1.0.0.1:53
-      - --certificatesResolvers.production.acme.dnsChallenge.disablePropagationCheck=true
+      - --certificatesResolvers.production.acme.dnsChallenge.propagation.delayBeforeChecks=60s
+      - --certificatesResolvers.production.acme.dnsChallenge.propagation.disableChecks=true
     volumes:
       - ./data/certs:/certs
       - /var/run/docker.sock:/var/run/docker.sock:ro
