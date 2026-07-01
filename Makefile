@@ -25,7 +25,7 @@ bootstrap:
 			echo "No age key found. Run age-keygen first (see README)."; exit 1; \
 		fi; \
 		sops --encrypt secrets.sops.yaml.example > $(SECRETS); \
-		echo "created $(SECRETS) — set CF_DNS_API_TOKEN, TINYAUTH_SECRET (openssl rand -hex 16),"; \
+		echo "created $(SECRETS) — set CF_DNS_API_TOKEN"; \
 		echo "  and TINYAUTH_AUTH_USERS (docker run --rm -it ghcr.io/steveiliop56/tinyauth:v5.0.7 user create)"; \
 		sops $(SECRETS); \
 	fi
@@ -43,7 +43,7 @@ prod:
 
 down:
 	-$(COMPOSE) $(WHOAMI) down
-	-TINYAUTH_SECRET=unused TINYAUTH_AUTH_USERS=unused $(COMPOSE) $(TINYAUTH) down
+	-TINYAUTH_AUTH_USERS=unused $(COMPOSE) $(TINYAUTH) down
 	-CF_DNS_API_TOKEN=unused $(COMPOSE) $(TRAEFIK) down
 
 logs:
@@ -52,7 +52,7 @@ logs:
 validate:
 	@DOMAIN=example.com ACME_EMAIL=a@b.c CERT_RESOLVER=staging CF_DNS_API_TOKEN=dummy \
 		$(COMPOSE) $(TRAEFIK) config >/dev/null && echo "traefik/compose.yml OK"
-	@DOMAIN=example.com TINYAUTH_SECRET=dummy TINYAUTH_AUTH_USERS=dummy \
+	@DOMAIN=example.com TINYAUTH_AUTH_USERS=dummy \
 		$(COMPOSE) $(TINYAUTH) config >/dev/null && echo "tinyauth/compose.yml OK"
 	@DOMAIN=example.com CERT_RESOLVER=staging \
 		$(COMPOSE) $(WHOAMI) config >/dev/null && echo "whoami/compose.yml OK"

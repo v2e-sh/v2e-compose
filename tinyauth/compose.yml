@@ -8,7 +8,6 @@ services:
       - frontend
     environment:
       - TINYAUTH_APPURL=https://tinyauth.${DOMAIN}
-      - TINYAUTH_SECRET=${TINYAUTH_SECRET:?set via `make up` (sops exec-env)}
       - TINYAUTH_AUTH_USERS=${TINYAUTH_AUTH_USERS:?set via `make up` (sops exec-env)}
     labels:
       - traefik.enable=true

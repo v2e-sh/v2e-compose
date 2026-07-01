@@ -10,7 +10,7 @@ jobs:
       - run: |
           DOMAIN=example.com ACME_EMAIL=a@b.c CERT_RESOLVER=staging CF_DNS_API_TOKEN=dummy \
             docker compose -f traefik/compose.yml config -q
-          DOMAIN=example.com TINYAUTH_SECRET=dummy TINYAUTH_AUTH_USERS=dummy \
+          DOMAIN=example.com TINYAUTH_AUTH_USERS=dummy \
             docker compose -f tinyauth/compose.yml config -q
           DOMAIN=example.com CERT_RESOLVER=staging \
             docker compose -f whoami/compose.yml config -q

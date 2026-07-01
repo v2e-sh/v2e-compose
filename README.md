@@ -68,12 +68,11 @@ COMPOSE-2 puts a TinyAuth forward-auth layer in front of protected services.
 - **SSO:** the session cookie is set on `.v2e.sh`, so one login covers every protected
   `*.v2e.sh` subdomain (COMPOSE-3's services inherit it).
 
-### Create the signing secret + a user
+### Create a user
 
-Both live in `secrets.sops.yaml` (edit with `sops secrets.sops.yaml`):
+The user lives in `secrets.sops.yaml` (edit with `sops secrets.sops.yaml`):
 
 ```bash
-openssl rand -hex 16                                                   # -> TINYAUTH_SECRET (32 chars)
 docker run --rm -it ghcr.io/steveiliop56/tinyauth:v5.0.7 user create   # -> TINYAUTH_AUTH_USERS (user:bcrypt)
 ```
 
