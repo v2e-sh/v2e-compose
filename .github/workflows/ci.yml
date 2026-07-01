@@ -7,7 +7,7 @@ jobs:
   compose:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Per-stack compose files (no root compose.yml). Dummy env satisfies the
       # ${VAR}/${VAR:?} interpolation; `config -q` validates without a daemon.
       - run: |
@@ -23,7 +23,7 @@ jobs:
   secret-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: TruffleHog
         run: |
           docker run --rm -v "$PWD:/repo" trufflesecurity/trufflehog:latest \
