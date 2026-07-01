@@ -59,6 +59,41 @@ curl -v https://whoami.v2e.sh      # no -k; issuer = Let's Encrypt
 Rollback is instant — `CERT_RESOLVER=staging` again (the two resolvers keep separate
 storage, so neither flip wipes the other).
 
+## Authentication (TinyAuth)
+
+COMPOSE-2 puts a TinyAuth forward-auth layer in front of protected services.
+
+- **Protected:** the Traefik dashboard — `https://traefik.v2e.sh` (behind login).
+- **Public:** `whoami.v2e.sh` and the TinyAuth login page `tinyauth.v2e.sh`.
+- **SSO:** the session cookie is set on `.v2e.sh`, so one login covers every protected
+  `*.v2e.sh` subdomain (COMPOSE-3's services inherit it).
+
+### Create the signing secret + a user
+
+Both live in `secrets.sops.yaml` (edit with `sops secrets.sops.yaml`):
+
+```bash
+openssl rand -hex 16                                                   # -> TINYAUTH_SECRET (32 chars)
+docker run --rm -it ghcr.io/steveiliop56/tinyauth:v5.0.7 user create   # -> TINYAUTH_AUTH_USERS (user:bcrypt)
+```
+
+`make up` deploys tinyauth alongside traefik/whoami. Then:
+
+- `https://traefik.v2e.sh` → redirected to the TinyAuth login → valid creds → dashboard.
+- `https://whoami.v2e.sh` → loads with no prompt (public).
+
+### Protecting another service
+
+Add one label to its router: `traefik.http.routers.<name>.middlewares=auth@docker`
+(chain with `secure-headers@docker` as needed). The login page must **never** carry
+`auth` — it cannot gate itself.
+
+### Swapping to Authelia later
+
+The middleware is named `auth` (not `tinyauth`) on purpose: replace the tinyauth stack with
+Authelia (+ Valkey), define a middleware also named `auth` pointing at Authelia's verify
+endpoint, and every protected router (`middlewares=auth@docker`) keeps working unchanged.
+
 ## How variables reach the container
 
 The compose files declare `${DOMAIN}`, `${ACME_EMAIL}`, `${CERT_RESOLVER}`, and
