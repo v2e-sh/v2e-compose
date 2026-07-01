@@ -1,0 +1,27 @@
+services:
+  tinyauth:
+    image: ghcr.io/steveiliop56/tinyauth:v5.0.7
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - frontend
+    environment:
+      - TINYAUTH_APPURL=https://tinyauth.${DOMAIN}
+      - TINYAUTH_SECRET=${TINYAUTH_SECRET:?set via `make up` (sops exec-env)}
+      - TINYAUTH_AUTH_USERS=${TINYAUTH_AUTH_USERS:?set via `make up` (sops exec-env)}
+    labels:
+      - traefik.enable=true
+      # Public login router — NO `auth` middleware (it cannot gate its own login).
+      - traefik.http.routers.tinyauth.rule=Host(`tinyauth.${DOMAIN}`)
+      - traefik.http.routers.tinyauth.entryPoints=websecure
+      - traefik.http.routers.tinyauth.tls=true
+      - traefik.http.routers.tinyauth.middlewares=secure-headers@docker
+      - traefik.http.services.tinyauth.loadbalancer.server.port=3000
+      # Backend-neutral forward-auth middleware (named `auth`, not `tinyauth`).
+      - traefik.http.middlewares.auth.forwardauth.address=http://tinyauth:3000/api/auth/traefik
+      - traefik.http.middlewares.auth.forwardauth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Email,Remote-Name
+
+networks:
+  frontend:
+    external: true
