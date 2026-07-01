@@ -28,3 +28,23 @@ jobs:
         run: |
           docker run --rm -v "$PWD:/repo" trufflesecurity/trufflehog:latest \
             filesystem /repo --only-verified --fail
+
+  # Blocking: gitleaks pattern scan alongside TruffleHog (defense in depth).
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: gitleaks
+        run: |
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:latest \
+            detect --source=/repo --no-git --redact --config=/repo/.gitleaks.toml
+
+  # Advisory: Trivy IaC/compose misconfig scan.
+  trivy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Trivy config scan (advisory)
+        run: |
+          docker run --rm -v "$PWD:/repo" aquasec/trivy:latest \
+            config /repo --severity HIGH,CRITICAL --exit-code 0
