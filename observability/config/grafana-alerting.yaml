@@ -1,6 +1,8 @@
-# One provisioned alert (the Phase G "one test alert" acceptance): fires when any
-# Prometheus scrape target is down for 5m. Wire a notification channel (email/webhook)
-# in the Grafana UI when wanted — the rule itself needs none to evaluate.
+# Provisioned alert rules — the silent-failure modes that would otherwise be found
+# only when something is already broken: a target down, a cert about to expire, a
+# disk filling, memory pressure, internal DNS dead. Each rule evaluates standalone
+# (no contact point required to fire); route them to a notification channel by
+# setting a default contact point (see notificationPolicies below / SOLIDIFY doc).
 apiVersion: 1
 
 groups:
@@ -31,7 +33,150 @@ groups:
               conditions:
                 - evaluator: {params: [0], type: gt}
         noDataState: OK
-        execErrState: Error
+        execErrState: Alerting
         for: 5m
+        labels: {severity: warning}
         annotations:
           summary: "{{ $values.A.Value }} Prometheus scrape target(s) down"
+
+      # --- TLS certificate expiry (blackbox probe_ssl_earliest_cert_expiry) ---
+      - uid: cert-expiry-warning
+        title: TLS cert expiring soon (<21d)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model:
+              # days until the wildcard cert expires (vector(999) = no data yet → not firing)
+              expr: (min(probe_ssl_earliest_cert_expiry - time()) / 86400) or vector(999)
+              refId: A
+              instant: true
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model:
+              type: threshold
+              refId: C
+              expression: A
+              conditions:
+                - evaluator: {params: [21], type: lt}
+        noDataState: OK
+        execErrState: Alerting
+        for: 1h
+        labels: {severity: warning}
+        annotations:
+          summary: "*.int.v2e.sh cert expires in {{ $values.A.Value | printf \"%.0f\" }} days — LE renewal may be stuck"
+
+      - uid: cert-expiry-critical
+        title: TLS cert expiring imminently (<7d)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model:
+              expr: (min(probe_ssl_earliest_cert_expiry - time()) / 86400) or vector(999)
+              refId: A
+              instant: true
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model:
+              type: threshold
+              refId: C
+              expression: A
+              conditions:
+                - evaluator: {params: [7], type: lt}
+        noDataState: OK
+        execErrState: Alerting
+        for: 1h
+        labels: {severity: critical}
+        annotations:
+          summary: "*.int.v2e.sh cert expires in {{ $values.A.Value | printf \"%.0f\" }} days — renew NOW"
+
+      # --- Internal DNS (blackbox dns probe against Technitium) ---
+      - uid: dns-internal-down
+        title: Internal DNS resolution failing
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              expr: min(probe_success{job="blackbox-dns"}) or vector(1)
+              refId: A
+              instant: true
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model:
+              type: threshold
+              refId: C
+              expression: A
+              conditions:
+                - evaluator: {params: [1], type: lt}
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "Technitium is not resolving int.v2e.sh — every app hostname is dark"
+
+      # --- Disk space (node-exporter, real filesystems only) ---
+      - uid: disk-low
+        title: Disk space low (<15%)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              expr: >-
+                min(node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs|ramfs"}
+                / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs|ramfs"}) or vector(1)
+              refId: A
+              instant: true
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model:
+              type: threshold
+              refId: C
+              expression: A
+              conditions:
+                - evaluator: {params: [0.15], type: lt}
+        noDataState: OK
+        execErrState: Alerting
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "A filesystem on the services host is under 15% free ({{ $values.A.Value | printf \"%.0f%%\" }} remaining)"
+
+      # --- Memory pressure (node-exporter) ---
+      - uid: mem-high
+        title: Host memory low (<10% available)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              expr: (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) or vector(1)
+              refId: A
+              instant: true
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model:
+              type: threshold
+              refId: C
+              expression: A
+              conditions:
+                - evaluator: {params: [0.10], type: lt}
+        noDataState: OK
+        execErrState: Alerting
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "services host memory under 10% available — OOM risk on the app estate"

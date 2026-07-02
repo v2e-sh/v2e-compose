@@ -7,5 +7,14 @@
     ":semanticCommits"
   ],
   "labels": ["dependencies"],
-  "schedule": ["before 6am on monday"]
+  "schedule": ["before 6am on monday"],
+  "packageRules": [
+    {
+      "description": "Major bumps never open a PR on their own — they wait for an explicit tick on the Dependency Dashboard. Enforces the pin-exact policy: a major (provider, ansible collection, base image, app image) is a deliberate act, reviewed for breaking changes, not a Monday-morning automerge.",
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true,
+      "labels": ["dependencies", "major-review"],
+      "automerge": false
+    }
+  ]
 }

@@ -1,0 +1,38 @@
+# blackbox_exporter modules — synthetic probes whose results Prometheus scrapes and
+# Grafana alerts on. Declarative (unlike Uptime Kuma's click-ops), so the whole
+# alerting surface lives in git. Three probe classes are used (targets in prometheus.yml):
+#   https_cert  → TLS handshake to the app endpoints; exposes probe_ssl_earliest_cert_expiry
+#   dns_int     → resolves an int.v2e.sh name against Technitium; catches DNS death
+#   icmp_node   → pings tailnet peers (control/home/mullvad) for subnet-router/exit health
+modules:
+  # TLS reachability + certificate expiry. insecure_skip_verify so the probe still
+  # reports expiry for the internal wildcard even if the chain isn't in blackbox's
+  # trust store; we alert on the expiry metric, not on validation here.
+  https_cert:
+    prober: http
+    timeout: 8s
+    http:
+      method: GET
+      valid_status_codes: []          # any response = endpoint alive; 401 from TinyAuth is fine
+      fail_if_not_ssl: true
+      tls_config:
+        insecure_skip_verify: true
+      preferred_ip_protocol: ip4
+
+  # DNS: does Technitium still resolve an internal name? Probe target is the DNS
+  # server (10.1.0.10); the query name is set here.
+  dns_int:
+    prober: dns
+    timeout: 5s
+    dns:
+      query_name: whoami.int.v2e.sh
+      query_type: A
+      valid_rcodes: [NOERROR]
+      preferred_ip_protocol: ip4
+
+  # Liveness of a tailnet node (subnet router / exit node). ICMP over the tailnet.
+  icmp_node:
+    prober: icmp
+    timeout: 5s
+    icmp:
+      preferred_ip_protocol: ip4

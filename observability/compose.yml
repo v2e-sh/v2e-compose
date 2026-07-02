@@ -125,6 +125,34 @@ services:
       - traefik.http.routers.uptime.middlewares=auth@docker,secure-headers@docker
       - traefik.http.services.uptime.loadbalancer.server.port=3001
 
+  # Synthetic probes: TLS cert expiry, internal DNS resolution, tailnet node liveness.
+  # Prometheus scrapes it with per-target `module`+`target` params (see prometheus.yml);
+  # Grafana alerts on the resulting metrics. This is the declarative alternative to
+  # Uptime Kuma click-ops — the whole probe set lives in git.
+  blackbox-exporter:
+    image: quay.io/prometheus/blackbox-exporter:v0.27.0
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 32m
+    cpus: 0.25
+    # ICMP probes to tailnet peers need the raw-socket capability and a route onto the
+    # tailnet — the services host reaches 100.x via control's advertised subnet route.
+    cap_add:
+      - NET_RAW
+    # frontend too (like prometheus): the cert/DNS probes must egress to the VLAN
+    # (traefik 10.1.2.10, Technitium 10.1.0.10), not stay on the isolated obs bridge.
+    networks:
+      - observability
+      - frontend
+    # Deterministic resolution for the cert probe — don't depend on the container
+    # resolver knowing int.v2e.sh; point the probed hostname straight at traefik so
+    # SNI (whoami.int.v2e.sh) still selects the wildcard cert we're checking.
+    extra_hosts:
+      - "whoami.int.v2e.sh:10.1.2.10"
+    volumes:
+      - ./config/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+
   node-exporter:
     image: prom/node-exporter:v1.11.1
     restart: unless-stopped
