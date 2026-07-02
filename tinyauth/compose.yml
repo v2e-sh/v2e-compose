@@ -7,12 +7,12 @@ services:
     networks:
       - frontend
     environment:
-      - TINYAUTH_APPURL=https://tinyauth.${DOMAIN}
+      - TINYAUTH_APPURL=https://tinyauth.${INTERNAL_DOMAIN}
       - TINYAUTH_AUTH_USERS=${TINYAUTH_AUTH_USERS:?set via `make up` (sops exec-env)}
     labels:
       - traefik.enable=true
       # Public login router — NO `auth` middleware (it cannot gate its own login).
-      - traefik.http.routers.tinyauth.rule=Host(`tinyauth.${DOMAIN}`)
+      - traefik.http.routers.tinyauth.rule=Host(`tinyauth.${INTERNAL_DOMAIN}`)
       - traefik.http.routers.tinyauth.entryPoints=websecure
       - traefik.http.routers.tinyauth.tls=true
       - traefik.http.routers.tinyauth.middlewares=secure-headers@docker

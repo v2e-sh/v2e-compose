@@ -51,7 +51,7 @@ services:
       # 32 random bytes, base64 — encrypts stored credentials (SSH keys etc.). Rotating it
       # invalidates every stored key, so it lives in SOPS with the other secrets.
       - SEMAPHORE_ACCESS_KEY_ENCRYPTION=${SEMAPHORE_ACCESS_KEY_ENCRYPTION:?set via the SOPS-rendered .env (semaphore_access_key_encryption)}
-      - SEMAPHORE_WEB_ROOT=https://semaphore.${DOMAIN}
+      - SEMAPHORE_WEB_ROOT=https://semaphore.${INTERNAL_DOMAIN}
       # Remote runner (lives on control as the ansible user, next to the mesh keys —
       # tasks execute there, so the SSH private keys never leave control). The runner
       # polls the server outbound; it can't come through traefik (TinyAuth would 401
@@ -69,7 +69,7 @@ services:
     labels:
       - traefik.enable=true
       # Gated: TinyAuth forward-auth in front of Semaphore's own login (defense in depth).
-      - traefik.http.routers.semaphore.rule=Host(`semaphore.${DOMAIN}`)
+      - traefik.http.routers.semaphore.rule=Host(`semaphore.${INTERNAL_DOMAIN}`)
       - traefik.http.routers.semaphore.entryPoints=websecure
       - traefik.http.routers.semaphore.tls=true
       - traefik.http.routers.semaphore.middlewares=auth@docker,secure-headers@docker

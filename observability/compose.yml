@@ -37,7 +37,7 @@ services:
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?set via the SOPS-rendered .env (grafana_admin_password)}
-      - GF_SERVER_ROOT_URL=https://grafana.${DOMAIN}/
+      - GF_SERVER_ROOT_URL=https://grafana.${INTERNAL_DOMAIN}/
       - GF_ANALYTICS_REPORTING_ENABLED=false
       - GF_ANALYTICS_CHECK_FOR_UPDATES=false
       - GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES=false
@@ -53,7 +53,7 @@ services:
       retries: 3
     labels:
       - traefik.enable=true
-      - traefik.http.routers.grafana.rule=Host(`grafana.${DOMAIN}`)
+      - traefik.http.routers.grafana.rule=Host(`grafana.${INTERNAL_DOMAIN}`)
       - traefik.http.routers.grafana.entryPoints=websecure
       - traefik.http.routers.grafana.tls=true
       - traefik.http.routers.grafana.middlewares=auth@docker,secure-headers@docker
@@ -107,7 +107,7 @@ services:
       - kuma-data:/app/data
     labels:
       - traefik.enable=true
-      - traefik.http.routers.uptime.rule=Host(`uptime.${DOMAIN}`)
+      - traefik.http.routers.uptime.rule=Host(`uptime.${INTERNAL_DOMAIN}`)
       - traefik.http.routers.uptime.entryPoints=websecure
       - traefik.http.routers.uptime.tls=true
       - traefik.http.routers.uptime.middlewares=auth@docker,secure-headers@docker
