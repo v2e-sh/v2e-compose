@@ -32,6 +32,10 @@ services:
     networks:
       - frontend
       - semaphore-internal
+    # LAN-only API endpoint for the remote runner on control (10.1.1.10 -> 10.1.2.10:3000).
+    # The VyOS firewall only allows control->services, and the public hostname stays gated.
+    ports:
+      - "3000:3000"
     environment:
       - SEMAPHORE_DB_DIALECT=postgres
       - SEMAPHORE_DB_HOST=postgres
@@ -48,6 +52,12 @@ services:
       # invalidates every stored key, so it lives in SOPS with the other secrets.
       - SEMAPHORE_ACCESS_KEY_ENCRYPTION=${SEMAPHORE_ACCESS_KEY_ENCRYPTION:?set via the SOPS-rendered .env (semaphore_access_key_encryption)}
       - SEMAPHORE_WEB_ROOT=https://semaphore.${DOMAIN}
+      # Remote runner (lives on control as the ansible user, next to the mesh keys —
+      # tasks execute there, so the SSH private keys never leave control). The runner
+      # polls the server outbound; it can't come through traefik (TinyAuth would 401
+      # its API calls), hence the LAN-published :3000 below.
+      - SEMAPHORE_USE_REMOTE_RUNNER=true
+      - SEMAPHORE_RUNNER_REGISTRATION_TOKEN=${SEMAPHORE_RUNNER_REG_TOKEN:?set via the SOPS-rendered .env (semaphore_runner_reg_token)}
     volumes:
       - ./data/semaphore:/var/lib/semaphore
     healthcheck:
