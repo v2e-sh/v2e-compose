@@ -12,7 +12,9 @@ services:
       - POSTGRES_PASSWORD=${SEMAPHORE_DB_PASS:?set via the SOPS-rendered .env (semaphore_db_pass)}
       - POSTGRES_DB=semaphore
     volumes:
-      - ./data/postgres:/var/lib/postgresql/data
+      # Postgres 18+ convention: mount the PARENT (/var/lib/postgresql); the server keeps
+      # data in a per-major-version subdir so future pg_upgrade --link works in-place.
+      - ./data/postgres:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U semaphore -d semaphore"]
       interval: 10s
