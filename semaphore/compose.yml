@@ -20,7 +20,7 @@ services:
       retries: 5
 
   semaphore:
-    image: semaphoreui/semaphore:v2.18.13
+    image: semaphoreui/semaphore:v2.18.14
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
