@@ -8,6 +8,8 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    mem_limit: 512m
+    cpus: 0.25
     # host net: DNS needs :53 (tcp+udp) on the node IP, plus the :5380 console. Port
     # publishing would drop client source IPs (breaks per-client DNS rules) — host net
     # keeps them intact and avoids the docker-proxy on a foundational service.

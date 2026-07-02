@@ -9,6 +9,8 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    mem_limit: 256m
+    cpus: 0.25
     network_mode: host
     depends_on:
       - hbbr
@@ -23,6 +25,8 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    mem_limit: 256m
+    cpus: 0.25
     network_mode: host
     volumes:
       - ./data:/root

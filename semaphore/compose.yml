@@ -4,6 +4,8 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    mem_limit: 1024m
+    cpus: 1
     # Internal-only network: the DB is reachable by the semaphore service and nothing else.
     networks:
       - semaphore-internal
@@ -26,6 +28,8 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    mem_limit: 256m
+    cpus: 0.25
     depends_on:
       postgres:
         condition: service_healthy

@@ -4,6 +4,8 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    mem_limit: 512m
+    cpus: 0.25
     # Host cgroup namespace so Arcane can detect its own container (upstream guidance).
     cgroup: host
     networks:
