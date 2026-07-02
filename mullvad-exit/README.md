@@ -51,43 +51,44 @@ docker compose logs gluetun | grep -i "public ip"      # should be a Mullvad IP
 curl https://am.i.mullvad.net/connected                 # "You are connected to Mullvad"
 ```
 
-## Troubleshooting — forwarded traffic doesn't flow
+## Design note — the sidecar MUST run in userspace (netstack) mode
 
-Two independent root causes were hit on first deploy (2026-07); either alone
-blackholes the exit node. Check the FORWARD counters first to tell them apart:
-`docker compose exec gluetun iptables -L FORWARD -v -n` — **nonzero drops** point
-at cause 1 (firewall backends), **all-zero counters** at cause 2 (policy routing:
-packets die before FORWARD).
+`TS_USERSPACE=true` is load-bearing, not a fallback. Kernel-mode forwarding
+(`TS_USERSPACE=false`) was tried first and fails against gluetun on **three
+independent fronts**, each of which alone blackholes the exit (verified live,
+2026-07, gluetun v3.41.1 + tailscale v1.98.4):
 
-**Cause 2 — FIREWALL_OUTBOUND_SUBNETS misroute (all counters zero):** setting
-`FIREWALL_OUTBOUND_SUBNETS=100.64.0.0/10` makes gluetun install
-`ip rule 99: to 100.64.0.0/10 lookup 199` with `100.64.0.0/10 via <eth0 gw>` —
-higher priority than tailscaled's table 52 (prio 5270). Replies to exit-node
-clients get routed into the docker bridge instead of back through tailscale0,
-and strict `rp_filter=1` drops the inbound leg too (reverse lookup says eth0,
-packet arrived on tailscale0). Fix: don't set that variable at all — the sidecar
-needs no tailnet bypass (its peer/DERP traffic travels inside the VPN tunnel).
-Live check: `docker compose exec gluetun ip rule` must NOT list a
-`to 100.64.0.0/10` rule.
+1. **Split iptables backends** — the tailscale image programs `iptables-legacy`
+   while gluetun's kill-switch (`FORWARD` policy `DROP`) uses `iptables-nft`;
+   the kernel enforces both, so tailscale's own ACCEPT/SNAT rules don't help.
+2. **`FIREWALL_OUTBOUND_SUBNETS=100.64.0.0/10`** (since removed) — gluetun turns
+   it into `ip rule 99: to 100.64.0.0/10 lookup 199` → `via <docker bridge>`,
+   hijacking the return path to exit clients ahead of tailscaled's table 52.
+3. **gluetun's master policy rule** — `101: not fwmark 0xca6c lookup 51820`
+   (its "everything unmarked goes into the VPN" wg-quick rule) also outranks
+   table 52, so even with (1) and (2) fixed, reply packets to `100.x` route
+   toward `tun0` instead of `tailscale0`, and strict `rp_filter=1` drops the
+   inbound leg symmetrically. Telltale: ALL `FORWARD` counters stay zero
+   (`docker compose exec gluetun iptables -L FORWARD -v -n`).
 
-**Cause 1 — split firewall backends:** the tailscale sidecar (Alpine)
-programs its forwarding/SNAT rules via **iptables-legacy**, while gluetun's
-kill-switch uses **iptables-nft** with `FORWARD` policy `DROP`. The kernel evaluates
-both backends, so tailscale's own rules pass in legacy and the packet still dies at
-gluetun's nft `DROP`. Symptom: `tailscale ping mullvad` pongs, but a device selecting
-the exit node has zero internet (even `ping 1.1.1.1` blackholes).
+In netstack mode none of this machinery is involved: tailscaled decrypts exit
+traffic in userspace and re-emits it as **ordinary sockets in the shared netns**,
+which follow gluetun's own routing (rule 101 → VPN table) out the Mullvad tunnel —
+the exact path gluetun is designed to give container-local traffic. The
+kill-switch keeps working: socket egress is only permitted via the tunnel, so a
+dropped VPN fails closed instead of leaking via `eth0`.
 
-The shipped fix is `post-rules.txt` (mounted to `/iptables/post-rules.txt`), which
-gluetun re-applies on every firewall rebuild — it opens `tailscale0<->tunnel`
-forwarding and masquerades out the tunnel, on the nft side. It lists both `tun0`
-(the live interface on v3.41.1) and `wg0` (gluetun's source default for WireGuard)
-— rules naming an absent interface are legal no-ops, so this survives an upgrade
-renaming the interface. Diagnosis, if it recurs:
+Operational caveats of a userspace exit (all fine for a privacy exit):
+- Only **TCP and UDP** are forwarded (netstack terminates and re-originates flows);
+  ping is synthesized by tailscaled, other IP protocols (GRE/SCTP) won't pass.
+- Throughput is netstack-bound and, behind Mullvad (no port forwarding), clients
+  often connect via DERP relay rather than direct — expect modest speeds. If
+  downloads are pathologically slow, try `WIREGUARD_MTU=1450` on gluetun
+  (double-WireGuard MTU stacking, see gluetun discussion #2201).
+- If you ever need kernel-mode speeds, don't share a netns with gluetun; run
+  WireGuard and tailscaled on separate hosts/netns you control.
 
-1. Confirm forwarding: `docker compose exec gluetun sysctl net.ipv4.ip_forward` → 1.
-2. Compare backends: `docker compose exec gluetun sh -c 'iptables -S FORWARD; iptables-legacy -S FORWARD'`
-   — nft must show the two `ACCEPT`s from post-rules.txt, not just `-P FORWARD DROP`.
-3. Same live (post-rules.txt does this permanently):
-   `docker compose exec gluetun sh -c 'iptables -A FORWARD -i tailscale0 -o tun0 -j ACCEPT; iptables -A FORWARD -i tun0 -o tailscale0 -j ACCEPT; iptables -t nat -A POSTROUTING -o tun0 -j MASQUERADE'`
-4. Last resort: set `FIREWALL=off` on gluetun (loses the kill-switch — less private;
-   prefer the post-rules fix).
+Diagnosis if forwarding regresses: check the sidecar really runs userspace
+(no `tailscale0` interface in `docker compose exec gluetun ip -br addr`), then
+check gluetun's `ip rule` for anything outranking its VPN rule. Last resort is
+`FIREWALL=off` on gluetun (loses the kill-switch; prefer fixing the real cause).
