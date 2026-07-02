@@ -65,13 +65,13 @@ services:
       - traefik.http.middlewares.secure-headers.headers.browserXssFilter=true
       - traefik.http.middlewares.secure-headers.headers.referrerPolicy=strict-origin-when-cross-origin
       # Dashboard router — PROTECTED, and it now carries the wildcard anchor (moved off whoami).
-      - traefik.http.routers.dashboard.rule=Host(`traefik.${DOMAIN}`)
+      - traefik.http.routers.dashboard.rule=Host(`traefik.${INTERNAL_DOMAIN}`)
       - traefik.http.routers.dashboard.entryPoints=websecure
       - traefik.http.routers.dashboard.service=api@internal
       - traefik.http.routers.dashboard.middlewares=auth@docker,secure-headers@docker
       - traefik.http.routers.dashboard.tls.certResolver=${CERT_RESOLVER:-staging}
-      - traefik.http.routers.dashboard.tls.domains[0].main=${DOMAIN}
-      - traefik.http.routers.dashboard.tls.domains[0].sans=*.${DOMAIN}
+      - traefik.http.routers.dashboard.tls.domains[0].main=${INTERNAL_DOMAIN}
+      - traefik.http.routers.dashboard.tls.domains[0].sans=*.${INTERNAL_DOMAIN}
     healthcheck:
       test: ["CMD", "traefik", "healthcheck", "--ping"]
       interval: 10s

@@ -10,7 +10,7 @@ services:
       - frontend
     environment:
       - ENVIRONMENT=production
-      - APP_URL=https://arcane.${DOMAIN}
+      - APP_URL=https://arcane.${INTERNAL_DOMAIN}
       # Traefik fronts Arcane on the docker `frontend` network; trust its X-Forwarded-*.
       - TRUSTED_PROXIES=172.16.0.0/12
       - ENCRYPTION_KEY=${ARCANE_ENCRYPTION_KEY:?set via the SOPS-rendered .env (arcane_encryption_key)}
@@ -35,7 +35,7 @@ services:
       - traefik.enable=true
       # Gated: TinyAuth forward-auth in front of Arcane's own login. Default first-boot
       # login is admin/password — change it immediately in the UI.
-      - traefik.http.routers.arcane.rule=Host(`arcane.${DOMAIN}`)
+      - traefik.http.routers.arcane.rule=Host(`arcane.${INTERNAL_DOMAIN}`)
       - traefik.http.routers.arcane.entryPoints=websecure
       - traefik.http.routers.arcane.tls=true
       - traefik.http.routers.arcane.middlewares=auth@docker,secure-headers@docker
