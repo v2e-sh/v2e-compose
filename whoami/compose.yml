@@ -4,8 +4,12 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    mem_limit: 64m
+    cpus: 0.25
     networks:
       - frontend
+    # No healthcheck: traefik/whoami is a scratch image (no shell/wget/curl). Liveness is
+    # covered by Traefik's router state + uptime-kuma.
     labels:
       - traefik.enable=true
       - traefik.http.routers.whoami.rule=Host(`whoami.${INTERNAL_DOMAIN}`)

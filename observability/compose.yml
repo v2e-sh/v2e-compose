@@ -2,7 +2,7 @@
 # Only grafana and uptime-kuma get Traefik routes (TinyAuth-gated); everything else is
 # internal-only, proxied through Grafana. Dozzle intentionally omitted (Arcane covers live
 # container logs); Alertmanager omitted (Grafana unified alerting + Kuma notifications).
-# Memory-limited throughout — the services node is a 2GB VM; totals stay ~1.1GiB hard cap.
+# Memory-limited throughout — the services node is a 4GB VM; totals stay ~1.2GiB hard cap.
 services:
   prometheus:
     image: prom/prometheus:v3.13.0
@@ -10,6 +10,7 @@ services:
     security_opt:
       - no-new-privileges:true
     mem_limit: 288m
+    cpus: 0.5
     networks:
       - observability
       - frontend # to scrape traefik:8082
@@ -31,6 +32,7 @@ services:
     security_opt:
       - no-new-privileges:true
     mem_limit: 240m
+    cpus: 0.5
     networks:
       - observability
       - frontend
@@ -65,6 +67,7 @@ services:
     security_opt:
       - no-new-privileges:true
     mem_limit: 192m
+    cpus: 0.5
     networks:
       - observability
     environment:
@@ -83,6 +86,7 @@ services:
     security_opt:
       - no-new-privileges:true
     mem_limit: 120m
+    cpus: 0.25
     networks:
       - observability
     environment:
@@ -100,11 +104,19 @@ services:
     security_opt:
       - no-new-privileges:true
     mem_limit: 140m
+    cpus: 0.25
     networks:
       - observability
       - frontend
     volumes:
       - kuma-data:/app/data
+    healthcheck:
+      # Upstream ships this Go probe (its own Dockerfile HEALTHCHECK) — hits the local :3001 app.
+      test: ["CMD", "extra/healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     labels:
       - traefik.enable=true
       - traefik.http.routers.uptime.rule=Host(`uptime.${INTERNAL_DOMAIN}`)
@@ -116,7 +128,10 @@ services:
   node-exporter:
     image: prom/node-exporter:v1.11.1
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     mem_limit: 24m
+    cpus: 0.25
     command: ["--path.rootfs=/host"]
     network_mode: host
     pid: host
@@ -126,7 +141,8 @@ services:
   cadvisor:
     image: ghcr.io/google/cadvisor:v0.60.3
     restart: unless-stopped
-    mem_limit: 96m
+    mem_limit: 200m
+    cpus: 0.5
     networks:
       - observability
     devices:
@@ -141,6 +157,11 @@ services:
       - --housekeeping_interval=30s
       - --docker_only=true
       - --store_container_labels=false
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 networks:
   frontend:

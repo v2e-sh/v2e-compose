@@ -4,6 +4,8 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    mem_limit: 512m
+    cpus: 1
     networks:
       - frontend
     ports:

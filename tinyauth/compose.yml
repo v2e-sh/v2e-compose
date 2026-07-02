@@ -4,11 +4,18 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    mem_limit: 128m
+    cpus: 0.25
     networks:
       - frontend
     environment:
       - TINYAUTH_APPURL=https://tinyauth.${INTERNAL_DOMAIN}
       - TINYAUTH_AUTH_USERS=${TINYAUTH_AUTH_USERS:?set via `make up` (sops exec-env)}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     labels:
       - traefik.enable=true
       # Public login router — NO `auth` middleware (it cannot gate its own login).
