@@ -1,0 +1,71 @@
+# Mullvad exit node — gluetun (Mullvad WireGuard) + a Tailscale sidecar that SHARES
+# gluetun's network namespace, so any tailnet device selecting this node egresses
+# through Mullvad. It is namespace-isolated: Mullvad's WireGuard never touches the
+# host routing table, so this is safe to run beside the home DNS/relay (unlike
+# running Mullvad on the host, which would hijack the node's routes — the same class
+# of breakage as Mullvad-on-the-mac). Shows up in the exit-node picker as "mullvad",
+# alongside the residential "home" exit.
+#
+# PORTABLE: identical to run standalone on a VPS — just supply the same env (see
+# .env.example). In the lab, the env is rendered from SOPS by the compose_stack role.
+#
+# Mullvad creds (→ SOPS): account portal → WireGuard configuration → generate a key
+# → download the .conf → take `PrivateKey` and `Address` from it. The key shown on
+# the "Manage devices" page is NOT the private key; you must generate a config.
+services:
+  gluetun:
+    image: qmcgaw/gluetun:v3.41.1
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    # gluetun owns the shared netns; forwarding here makes exit-node routing work.
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv6.conf.all.forwarding=1
+    environment:
+      - VPN_SERVICE_PROVIDER=mullvad
+      - VPN_TYPE=wireguard
+      - WIREGUARD_PRIVATE_KEY=${MULLVAD_WIREGUARD_PRIVATE_KEY:?set via SOPS (mullvad_wireguard_private_key)}
+      - WIREGUARD_ADDRESSES=${MULLVAD_WIREGUARD_ADDRESSES:?set via SOPS (mullvad_wireguard_addresses)}
+      # Location pick (non-secret). Leave both empty for Mullvad's default.
+      - SERVER_CITIES=${MULLVAD_SERVER_CITIES:-}
+      - SERVER_COUNTRIES=${MULLVAD_SERVER_COUNTRIES:-}
+      # Keep the kill-switch ON (no leaks if the tunnel drops) but let tailnet
+      # traffic (Tailscale CGNAT range) through so the sidecar can reach its peers.
+      - FIREWALL_OUTBOUND_SUBNETS=100.64.0.0/10
+      - TZ=${TZ:-UTC}
+    healthcheck:
+      # gluetun serves a control-server health endpoint on :9999.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9999/v1/openvpn/status"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  tailscale:
+    image: tailscale/tailscale:v1.98.4
+    restart: unless-stopped
+    # Share gluetun's netns → all of tailscaled's traffic (and any exit traffic it
+    # forwards) leaves through the Mullvad tunnel. depends_on so the tunnel is up first.
+    network_mode: service:gluetun
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    environment:
+      - TS_AUTHKEY=${TAILSCALE_AUTHKEY:?set via SOPS (tailscale_authkey — reuse the lab's reusable key)}
+      - TS_EXTRA_ARGS=--advertise-exit-node --hostname=${MULLVAD_EXIT_HOSTNAME:-mullvad}
+      - TS_STATE_DIR=/var/lib/tailscale
+      # Kernel networking (not userspace): required for exit-node packet forwarding.
+      - TS_USERSPACE=false
+    volumes:
+      - ./data/tailscale:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+
+# NOTE: modern Tailscale sets up its own exit-node SNAT, so no masquerade sidecar is
+# needed. If forwarded exit traffic doesn't flow on first deploy, see README
+# "Troubleshooting" — the fallback is a one-line masquerade helper or FIREWALL=off.
