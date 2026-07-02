@@ -1,0 +1,24 @@
+# Technitium DNS — the lab's internal resolver, on the infra appliance node (mgmt VLAN).
+# host network: it owns the node's :53 (the systemd-resolved stub is disabled on this
+# node so :53 is free) and serves the admin console on :5380. Reached over the lab
+# (services/agent -> infra:53, firewalled) and via Tailscale; NOT exposed to the WAN.
+services:
+  technitium:
+    image: technitium/dns-server:15.2.0
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # host net: DNS needs :53 (tcp+udp) on the node IP, plus the :5380 console. Port
+    # publishing would drop client source IPs (breaks per-client DNS rules) — host net
+    # keeps them intact and avoids the docker-proxy on a foundational service.
+    network_mode: host
+    environment:
+      # First-boot admin password for the :5380 console (from the SOPS-rendered .env).
+      - DNS_SERVER_DOMAIN=infra.int.${DOMAIN}
+      - DNS_SERVER_ADMIN_PASSWORD=${TECHNITIUM_ADMIN_PASSWORD:?set via the SOPS-rendered infra .env (technitium_admin_password)}
+      # Recurse to the upstream resolvers; the lab points its DNS here.
+      - DNS_SERVER_FORWARDERS=${NAME_SERVERS:-1.1.1.1, 9.9.9.9}
+    volumes:
+      - ./data:/etc/dns
+    # No container healthcheck (don't assume curl/shell in the image). Liveness is
+    # monitored externally by uptime-kuma (DNS query + :5380 console) over the tailnet.

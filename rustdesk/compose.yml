@@ -1,0 +1,28 @@
+# RustDesk self-hosted relay (hbbs = rendezvous/ID, hbbr = relay) on the infra node.
+# host network: RustDesk uses a spread of tcp/udp ports (21114-21119, 21116/udp) and
+# hbbs must see real client source addresses. INTERNAL / Tailscale-only — no WAN DNAT
+# (see the RustDesk access decision); clients reach it over the tailnet once ANS-4 lands.
+services:
+  hbbs:
+    image: rustdesk/rustdesk-server:1.1.15
+    command: hbbs
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    network_mode: host
+    depends_on:
+      - hbbr
+    volumes:
+      - ./data:/root
+    # No healthcheck: the image is scratch-based (no shell/curl). Liveness is inferred
+    # from the port being open; monitor via uptime-kuma over the tailnet.
+
+  hbbr:
+    image: rustdesk/rustdesk-server:1.1.15
+    command: hbbr
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    network_mode: host
+    volumes:
+      - ./data:/root
