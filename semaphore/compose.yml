@@ -1,0 +1,72 @@
+services:
+  postgres:
+    image: postgres:18.4-alpine
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # Internal-only network: the DB is reachable by the semaphore service and nothing else.
+    networks:
+      - semaphore-internal
+    environment:
+      - POSTGRES_USER=semaphore
+      - POSTGRES_PASSWORD=${SEMAPHORE_DB_PASS:?set via the SOPS-rendered .env (semaphore_db_pass)}
+      - POSTGRES_DB=semaphore
+    volumes:
+      # Postgres 18+ convention: mount the PARENT (/var/lib/postgresql); the server keeps
+      # data in a per-major-version subdir so future pg_upgrade --link works in-place.
+      - ./data/postgres:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U semaphore -d semaphore"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  semaphore:
+    image: semaphoreui/semaphore:v2.18.14
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - frontend
+      - semaphore-internal
+    environment:
+      - SEMAPHORE_DB_DIALECT=postgres
+      - SEMAPHORE_DB_HOST=postgres
+      - SEMAPHORE_DB_PORT=5432
+      - SEMAPHORE_DB_USER=semaphore
+      - SEMAPHORE_DB_PASS=${SEMAPHORE_DB_PASS:?set via the SOPS-rendered .env (semaphore_db_pass)}
+      - SEMAPHORE_DB=semaphore
+      # Admin bootstrap (applied on first boot; manage the user in the UI afterwards).
+      - SEMAPHORE_ADMIN=admin
+      - SEMAPHORE_ADMIN_NAME=Admin
+      - SEMAPHORE_ADMIN_EMAIL=admin@${DOMAIN}
+      - SEMAPHORE_ADMIN_PASSWORD=${SEMAPHORE_ADMIN_PASSWORD:?set via the SOPS-rendered .env (semaphore_admin_password)}
+      # 32 random bytes, base64 — encrypts stored credentials (SSH keys etc.). Rotating it
+      # invalidates every stored key, so it lives in SOPS with the other secrets.
+      - SEMAPHORE_ACCESS_KEY_ENCRYPTION=${SEMAPHORE_ACCESS_KEY_ENCRYPTION:?set via the SOPS-rendered .env (semaphore_access_key_encryption)}
+      - SEMAPHORE_WEB_ROOT=https://semaphore.${DOMAIN}
+    volumes:
+      - ./data/semaphore:/var/lib/semaphore
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/api/ping || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    labels:
+      - traefik.enable=true
+      # Gated: TinyAuth forward-auth in front of Semaphore's own login (defense in depth).
+      - traefik.http.routers.semaphore.rule=Host(`semaphore.${DOMAIN}`)
+      - traefik.http.routers.semaphore.entryPoints=websecure
+      - traefik.http.routers.semaphore.tls=true
+      - traefik.http.routers.semaphore.middlewares=auth@docker,secure-headers@docker
+      - traefik.http.services.semaphore.loadbalancer.server.port=3000
+
+networks:
+  frontend:
+    external: true
+  semaphore-internal:
+    internal: true

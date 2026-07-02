@@ -1,0 +1,46 @@
+services:
+  arcane:
+    image: ghcr.io/getarcaneapp/manager:v2.3.0
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # Host cgroup namespace so Arcane can detect its own container (upstream guidance).
+    cgroup: host
+    networks:
+      - frontend
+    environment:
+      - ENVIRONMENT=production
+      - APP_URL=https://arcane.${DOMAIN}
+      # Traefik fronts Arcane on the docker `frontend` network; trust its X-Forwarded-*.
+      - TRUSTED_PROXIES=172.16.0.0/12
+      - ENCRYPTION_KEY=${ARCANE_ENCRYPTION_KEY:?set via the SOPS-rendered .env (arcane_encryption_key)}
+      - JWT_SECRET=${ARCANE_JWT_SECRET:?set via the SOPS-rendered .env (arcane_jwt_secret)}
+      # Where Arcane looks for compose projects — the deployed v2e stacks themselves
+      # (this is the Dockge-replacement role: view/manage the running stacks).
+      - PROJECTS_DIRECTORY=/opt/v2e-compose
+      - TZ=UTC
+    volumes:
+      # Arcane manages the local Docker engine. Full socket by design; if this ever needs
+      # tightening, upstream ships a docker-socket-proxy example (docker/examples/compose.proxy.yaml).
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/app/data
+      - /opt/v2e-compose:/opt/v2e-compose
+    healthcheck:
+      test: ["CMD", "./arcane", "health", "--timeout", "2s"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    labels:
+      - traefik.enable=true
+      # Gated: TinyAuth forward-auth in front of Arcane's own login. Default first-boot
+      # login is admin/password — change it immediately in the UI.
+      - traefik.http.routers.arcane.rule=Host(`arcane.${DOMAIN}`)
+      - traefik.http.routers.arcane.entryPoints=websecure
+      - traefik.http.routers.arcane.tls=true
+      - traefik.http.routers.arcane.middlewares=auth@docker,secure-headers@docker
+      - traefik.http.services.arcane.loadbalancer.server.port=3552
+
+networks:
+  frontend:
+    external: true
