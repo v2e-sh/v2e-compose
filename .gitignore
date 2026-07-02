@@ -9,4 +9,8 @@ secrets.sops.yaml
 traefik/data/certs/*
 !traefik/data/certs/.gitkeep
 
+# Runtime state (databases, app data) — never in git.
+semaphore/data/
+arcane/data/
+
 .DS_Store
