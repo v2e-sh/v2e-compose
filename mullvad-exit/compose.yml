@@ -36,13 +36,9 @@ services:
       # traffic (Tailscale CGNAT range) through so the sidecar can reach its peers.
       - FIREWALL_OUTBOUND_SUBNETS=100.64.0.0/10
       - TZ=${TZ:-UTC}
-    healthcheck:
-      # gluetun serves a control-server health endpoint on :9999.
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9999/v1/openvpn/status"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+    # No custom healthcheck: the gluetun image ships its own HEALTHCHECK that only
+    # reports healthy once the VPN tunnel is actually up — which is exactly what the
+    # tailscale sidecar's `depends_on: service_healthy` should gate on.
 
   tailscale:
     image: tailscale/tailscale:v1.98.4
