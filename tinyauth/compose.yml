@@ -12,7 +12,7 @@ services:
       - TINYAUTH_APPURL=https://tinyauth.${INTERNAL_DOMAIN}
       - TINYAUTH_AUTH_USERS=${TINYAUTH_AUTH_USERS:?set via `make up` (sops exec-env)}
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/api/health || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/healthz || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
