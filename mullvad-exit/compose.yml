@@ -36,6 +36,12 @@ services:
       # traffic (Tailscale CGNAT range) through so the sidecar can reach its peers.
       - FIREWALL_OUTBOUND_SUBNETS=100.64.0.0/10
       - TZ=${TZ:-UTC}
+    # Exit-node forwarding rules, re-applied by gluetun on every firewall rebuild
+    # (VPN reconnects included). Needed because the tailscale sidecar programs
+    # iptables-legacy while gluetun's kill-switch (FORWARD policy DROP) lives in
+    # iptables-nft — forwarded traffic must pass both. See post-rules.txt.
+    volumes:
+      - ./post-rules.txt:/iptables/post-rules.txt:ro
     # No custom healthcheck: the gluetun image ships its own HEALTHCHECK that only
     # reports healthy once the VPN tunnel is actually up — which is exactly what the
     # tailscale sidecar's `depends_on: service_healthy` should gate on.
@@ -62,6 +68,7 @@ services:
       - ./data/tailscale:/var/lib/tailscale
       - /dev/net/tun:/dev/net/tun
 
-# NOTE: modern Tailscale sets up its own exit-node SNAT, so no masquerade sidecar is
-# needed. If forwarded exit traffic doesn't flow on first deploy, see README
-# "Troubleshooting" — the fallback is a one-line masquerade helper or FIREWALL=off.
+# NOTE: Tailscale does set up its own exit-node forwarding + SNAT, but the Alpine
+# image writes them via iptables-LEGACY while gluetun firewalls via iptables-NFT;
+# the kernel evaluates both, so gluetun's nft FORWARD DROP still eats forwarded
+# traffic. post-rules.txt (mounted above) opens tailscale0<->tun0 on the nft side.

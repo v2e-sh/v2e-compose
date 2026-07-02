@@ -53,11 +53,24 @@ curl https://am.i.mullvad.net/connected                 # "You are connected to 
 
 ## Troubleshooting — forwarded traffic doesn't flow
 
-Modern Tailscale sets up its own exit-node SNAT, so the two containers above are
-normally enough. If a device selects the exit node but gets no internet:
+**Known root cause (hit on first deploy, 2026-07):** the tailscale sidecar (Alpine)
+programs its forwarding/SNAT rules via **iptables-legacy**, while gluetun's
+kill-switch uses **iptables-nft** with `FORWARD` policy `DROP`. The kernel evaluates
+both backends, so tailscale's own rules pass in legacy and the packet still dies at
+gluetun's nft `DROP`. Symptom: `tailscale ping mullvad` pongs, but a device selecting
+the exit node has zero internet (even `ping 1.1.1.1` blackholes).
+
+The shipped fix is `post-rules.txt` (mounted to `/iptables/post-rules.txt`), which
+gluetun re-applies on every firewall rebuild — it opens `tailscale0<->tunnel`
+forwarding and masquerades out the tunnel, on the nft side. It lists both `tun0`
+(the live interface on v3.41.1) and `wg0` (gluetun's source default for WireGuard)
+— rules naming an absent interface are legal no-ops, so this survives an upgrade
+renaming the interface. Diagnosis, if it recurs:
+
 1. Confirm forwarding: `docker compose exec gluetun sysctl net.ipv4.ip_forward` → 1.
-2. Add an explicit masquerade in gluetun's namespace:
-   `docker compose exec gluetun sh -c 'iptables -t nat -A POSTROUTING -o tun0 -j MASQUERADE'`
-   — if that fixes it, make it permanent with a tiny post-rules helper.
-3. Last resort: set `FIREWALL=off` on gluetun (loses the kill-switch — less private;
-   prefer the masquerade fix).
+2. Compare backends: `docker compose exec gluetun sh -c 'iptables -S FORWARD; iptables-legacy -S FORWARD'`
+   — nft must show the two `ACCEPT`s from post-rules.txt, not just `-P FORWARD DROP`.
+3. Same live (post-rules.txt does this permanently):
+   `docker compose exec gluetun sh -c 'iptables -A FORWARD -i tailscale0 -o tun0 -j ACCEPT; iptables -A FORWARD -i tun0 -o tailscale0 -j ACCEPT; iptables -t nat -A POSTROUTING -o tun0 -j MASQUERADE'`
+4. Last resort: set `FIREWALL=off` on gluetun (loses the kill-switch — less private;
+   prefer the post-rules fix).
