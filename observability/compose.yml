@@ -1,0 +1,161 @@
+# Phase G — observability: Prometheus + Grafana + Loki/Alloy + Uptime Kuma (+ exporters).
+# Only grafana and uptime-kuma get Traefik routes (TinyAuth-gated); everything else is
+# internal-only, proxied through Grafana. Dozzle intentionally omitted (Arcane covers live
+# container logs); Alertmanager omitted (Grafana unified alerting + Kuma notifications).
+# Memory-limited throughout — the services node is a 2GB VM; totals stay ~1.1GiB hard cap.
+services:
+  prometheus:
+    image: prom/prometheus:v3.13.0
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 288m
+    networks:
+      - observability
+      - frontend # to scrape traefik:8082
+    # node-exporter runs on the HOST network; reach it via the host gateway.
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:9090/-/healthy || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  grafana:
+    image: grafana/grafana:13.0.3
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 240m
+    networks:
+      - observability
+      - frontend
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?set via the SOPS-rendered .env (grafana_admin_password)}
+      - GF_SERVER_ROOT_URL=https://grafana.${DOMAIN}/
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+      - GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES=false
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./config/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+      - ./config/grafana-alerting.yaml:/etc/grafana/provisioning/alerting/alerting.yaml:ro
+      - grafana-data:/var/lib/grafana
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.grafana.rule=Host(`grafana.${DOMAIN}`)
+      - traefik.http.routers.grafana.entryPoints=websecure
+      - traefik.http.routers.grafana.tls=true
+      - traefik.http.routers.grafana.middlewares=auth@docker,secure-headers@docker
+      - traefik.http.services.grafana.loadbalancer.server.port=3000
+
+  loki:
+    image: grafana/loki:3.7.3
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 192m
+    networks:
+      - observability
+    environment:
+      # Loki doesn't auto-tune to the cgroup limit; force GC before the OOM killer.
+      - GOMEMLIMIT=160MiB
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    volumes:
+      - ./config/loki.yaml:/etc/loki/loki.yaml:ro
+      - loki-data:/loki
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3100/ready || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  alloy:
+    image: grafana/alloy:v1.17.1
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 120m
+    networks:
+      - observability
+    environment:
+      - GOMEMLIMIT=100MiB
+    volumes:
+      - ./config/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy-data:/var/lib/alloy/data
+    depends_on:
+      - loki
+
+  uptime-kuma:
+    image: louislam/uptime-kuma:2.4.0-slim
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 140m
+    networks:
+      - observability
+      - frontend
+    volumes:
+      - kuma-data:/app/data
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.uptime.rule=Host(`uptime.${DOMAIN}`)
+      - traefik.http.routers.uptime.entryPoints=websecure
+      - traefik.http.routers.uptime.tls=true
+      - traefik.http.routers.uptime.middlewares=auth@docker,secure-headers@docker
+      - traefik.http.services.uptime.loadbalancer.server.port=3001
+
+  node-exporter:
+    image: prom/node-exporter:v1.11.1
+    restart: unless-stopped
+    mem_limit: 24m
+    command: ["--path.rootfs=/host"]
+    network_mode: host
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+
+  cadvisor:
+    image: ghcr.io/google/cadvisor:v0.60.3
+    restart: unless-stopped
+    mem_limit: 96m
+    networks:
+      - observability
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    command:
+      - --housekeeping_interval=30s
+      - --docker_only=true
+      - --store_container_labels=false
+
+networks:
+  frontend:
+    external: true
+  observability: {}
+
+volumes:
+  # Named volumes (not ./data binds): these images run as non-root uids (grafana 472,
+  # prometheus 65534, loki 10001) and root-owned bind dirs would break them.
+  prometheus-data:
+  grafana-data:
+  loki-data:
+  alloy-data:
+  kuma-data:

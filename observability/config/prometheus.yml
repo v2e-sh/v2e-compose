@@ -1,0 +1,27 @@
+# Minimal scrape set for the services node. Retention lives HERE (v3 deprecates the
+# --storage.tsdb.retention.* flags); prometheus self-tunes GOMEMLIMIT to 0.9x the
+# container mem_limit (auto-gomemlimit is on by default in v3).
+global:
+  scrape_interval: 30s
+  evaluation_interval: 60s
+
+storage:
+  tsdb:
+    retention:
+      time: 15d
+      size: 1GB
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs: [{targets: ["localhost:9090"]}]
+
+  # node-exporter runs on the host network namespace.
+  - job_name: node
+    static_configs: [{targets: ["host.docker.internal:9100"]}]
+
+  - job_name: cadvisor
+    static_configs: [{targets: ["cadvisor:8080"]}]
+
+  # traefik's dedicated metrics entrypoint (:8082, not published to the host).
+  - job_name: traefik
+    static_configs: [{targets: ["traefik:8082"]}]
