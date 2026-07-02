@@ -32,9 +32,13 @@ services:
       # Location pick (non-secret). Leave both empty for Mullvad's default.
       - SERVER_CITIES=${MULLVAD_SERVER_CITIES:-}
       - SERVER_COUNTRIES=${MULLVAD_SERVER_COUNTRIES:-}
-      # Keep the kill-switch ON (no leaks if the tunnel drops) but let tailnet
-      # traffic (Tailscale CGNAT range) through so the sidecar can reach its peers.
-      - FIREWALL_OUTBOUND_SUBNETS=100.64.0.0/10
+      # Do NOT set FIREWALL_OUTBOUND_SUBNETS to the Tailscale range (100.64.0.0/10):
+      # gluetun turns it into a policy route (prio 99: to 100.64/10 -> eth0) that
+      # outranks tailscaled's own table 52, hijacking the return path of forwarded
+      # exit traffic into the docker bridge — and strict rp_filter then drops the
+      # inbound leg too, so the exit node blackholes before FORWARD is ever hit.
+      # The sidecar doesn't need the bypass: its peer/DERP traffic rides INSIDE the
+      # Mullvad tunnel (tun0), never addressed to 100.64/10 at the outer layer.
       - TZ=${TZ:-UTC}
     # Exit-node forwarding rules, re-applied by gluetun on every firewall rebuild
     # (VPN reconnects included). Needed because the tailscale sidecar programs

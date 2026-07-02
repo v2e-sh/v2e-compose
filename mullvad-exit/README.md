@@ -53,7 +53,24 @@ curl https://am.i.mullvad.net/connected                 # "You are connected to 
 
 ## Troubleshooting — forwarded traffic doesn't flow
 
-**Known root cause (hit on first deploy, 2026-07):** the tailscale sidecar (Alpine)
+Two independent root causes were hit on first deploy (2026-07); either alone
+blackholes the exit node. Check the FORWARD counters first to tell them apart:
+`docker compose exec gluetun iptables -L FORWARD -v -n` — **nonzero drops** point
+at cause 1 (firewall backends), **all-zero counters** at cause 2 (policy routing:
+packets die before FORWARD).
+
+**Cause 2 — FIREWALL_OUTBOUND_SUBNETS misroute (all counters zero):** setting
+`FIREWALL_OUTBOUND_SUBNETS=100.64.0.0/10` makes gluetun install
+`ip rule 99: to 100.64.0.0/10 lookup 199` with `100.64.0.0/10 via <eth0 gw>` —
+higher priority than tailscaled's table 52 (prio 5270). Replies to exit-node
+clients get routed into the docker bridge instead of back through tailscale0,
+and strict `rp_filter=1` drops the inbound leg too (reverse lookup says eth0,
+packet arrived on tailscale0). Fix: don't set that variable at all — the sidecar
+needs no tailnet bypass (its peer/DERP traffic travels inside the VPN tunnel).
+Live check: `docker compose exec gluetun ip rule` must NOT list a
+`to 100.64.0.0/10` rule.
+
+**Cause 1 — split firewall backends:** the tailscale sidecar (Alpine)
 programs its forwarding/SNAT rules via **iptables-legacy**, while gluetun's
 kill-switch uses **iptables-nft** with `FORWARD` policy `DROP`. The kernel evaluates
 both backends, so tailscale's own rules pass in legacy and the packet still dies at
