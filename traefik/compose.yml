@@ -24,6 +24,11 @@ services:
       - --entryPoints.web.http.redirections.entryPoint.to=websecure
       - --entryPoints.web.http.redirections.entryPoint.scheme=https
       - --entryPoints.websecure.address=:443
+      # Prometheus metrics on a dedicated entrypoint (:8082, container-internal only —
+      # scraped by the observability stack over the frontend network, never published).
+      - --entryPoints.metrics.address=:8082
+      - --metrics.prometheus=true
+      - --metrics.prometheus.entryPoint=metrics
       # --- staging resolver ---
       - --certificatesResolvers.staging.acme.email=${ACME_EMAIL}
       - --certificatesResolvers.staging.acme.storage=/certs/acme-staging.json
