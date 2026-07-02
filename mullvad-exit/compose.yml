@@ -20,10 +20,6 @@ services:
       - NET_ADMIN
     devices:
       - /dev/net/tun:/dev/net/tun
-    # gluetun owns the shared netns; forwarding here makes exit-node routing work.
-    sysctls:
-      - net.ipv4.ip_forward=1
-      - net.ipv6.conf.all.forwarding=1
     environment:
       - VPN_SERVICE_PROVIDER=mullvad
       - VPN_TYPE=wireguard
@@ -32,9 +28,13 @@ services:
       # Location pick (non-secret). Leave both empty for Mullvad's default.
       - SERVER_CITIES=${MULLVAD_SERVER_CITIES:-}
       - SERVER_COUNTRIES=${MULLVAD_SERVER_COUNTRIES:-}
-      # Keep the kill-switch ON (no leaks if the tunnel drops) but let tailnet
-      # traffic (Tailscale CGNAT range) through so the sidecar can reach its peers.
-      - FIREWALL_OUTBOUND_SUBNETS=100.64.0.0/10
+      # Do NOT set FIREWALL_OUTBOUND_SUBNETS to the Tailscale range (100.64.0.0/10):
+      # gluetun turns it into a policy route (prio 99: to 100.64/10 -> eth0) that
+      # outranks tailscaled's own table 52, hijacking the return path of forwarded
+      # exit traffic into the docker bridge — and strict rp_filter then drops the
+      # inbound leg too, so the exit node blackholes before FORWARD is ever hit.
+      # The sidecar doesn't need the bypass: its peer/DERP traffic rides INSIDE the
+      # Mullvad tunnel (tun0), never addressed to 100.64/10 at the outer layer.
       - TZ=${TZ:-UTC}
     # No custom healthcheck: the gluetun image ships its own HEALTHCHECK that only
     # reports healthy once the VPN tunnel is actually up — which is exactly what the
@@ -49,19 +49,22 @@ services:
     depends_on:
       gluetun:
         condition: service_healthy
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
     environment:
       - TS_AUTHKEY=${TAILSCALE_AUTHKEY:?set via SOPS (tailscale_authkey — reuse the lab's reusable key)}
       - TS_EXTRA_ARGS=--advertise-exit-node --hostname=${MULLVAD_EXIT_HOSTNAME:-mullvad}
       - TS_STATE_DIR=/var/lib/tailscale
-      # Kernel networking (not userspace): required for exit-node packet forwarding.
-      - TS_USERSPACE=false
+      # USERSPACE (netstack) mode — REQUIRED with gluetun, not a fallback. In kernel
+      # mode, forwarded exit traffic fights gluetun on three fronts (split iptables
+      # backends legacy/nft, FIREWALL_OUTBOUND_SUBNETS policy routes, and gluetun's
+      # master "not fwmark -> VPN table" rule outranking tailscaled's table 52 +
+      # strict rp_filter) — each one alone blackholes the exit. In netstack mode,
+      # exit traffic leaves tailscaled as ordinary sockets in the shared netns,
+      # which follow gluetun's own routing out the Mullvad tunnel by design. No
+      # forwarding sysctls, NET_ADMIN, or /dev/net/tun needed on this container.
+      - TS_USERSPACE=true
     volumes:
       - ./data/tailscale:/var/lib/tailscale
-      - /dev/net/tun:/dev/net/tun
 
-# NOTE: modern Tailscale sets up its own exit-node SNAT, so no masquerade sidecar is
-# needed. If forwarded exit traffic doesn't flow on first deploy, see README
-# "Troubleshooting" — the fallback is a one-line masquerade helper or FIREWALL=off.
+# NOTE: the kill-switch still holds for exit traffic: in netstack mode it egresses
+# as netns-local sockets, which gluetun's firewall only permits out through the VPN
+# tunnel — if Mullvad drops, traffic fails closed rather than leaking via eth0.
