@@ -18,8 +18,8 @@ services:
       # exposed at web root, so /background.svg maps to resources/background.svg.
       - TINYAUTH_RESOURCES_PATH=/resources
       - TINYAUTH_UI_BACKGROUNDIMAGE=/background.svg
-      # Forgot-password copy tuned for this lab (users live in SOPS).
-      - TINYAUTH_UI_FORGOTPASSWORDMESSAGE=Access is managed in SOPS — contact the lab operator.
+      # Forgot-password copy tuned for this lab.
+      - TINYAUTH_UI_FORGOTPASSWORDMESSAGE=Contact the admins to reset your access.
     volumes:
       - ./resources:/resources:ro
     healthcheck:
