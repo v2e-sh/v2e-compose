@@ -91,6 +91,15 @@ services:
       - observability
     environment:
       - GOMEMLIMIT=100MiB
+    # Override the image default (which binds the HTTP/metrics server to 127.0.0.1)
+    # so Prometheus can scrape alloy:12345 over the observability network. Keep
+    # --storage.path or Alloy loses the alloy-data volume. Args only (ENTRYPOINT
+    # is /bin/alloy). Endpoint stays internal — not host-published, not via Traefik.
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --storage.path=/var/lib/alloy/data
+      - --server.http.listen-addr=0.0.0.0:12345
     volumes:
       - ./config/config.alloy:/etc/alloy/config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
