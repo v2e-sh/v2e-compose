@@ -52,7 +52,10 @@ services:
     # Userspace (netstack) mode needs no caps, so no-new-privileges is safe here.
     security_opt:
       - no-new-privileges:true
-    mem_limit: 128m
+    # This container IS the exit node — it forwards all selected tailnet traffic
+    # through gVisor netstack in userspace, which is memory-hungrier than kernel
+    # mode. 256m gives headroom so concurrent exit flows can't OOM-flap the node.
+    mem_limit: 256m
     cpus: 0.5
     # Share gluetun's netns → all of tailscaled's traffic (and any exit traffic it
     # forwards) leaves through the Mullvad tunnel. depends_on so the tunnel is up first.
