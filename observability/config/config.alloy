@@ -36,6 +36,15 @@ loki.source.docker "default" {
 loki.process "scrub" {
   forward_to = [loki.write.default.receiver]
 
+  // Auth-scheme headers FIRST. `Authorization: Bearer <jwt>` must be redacted before
+  // the key=value stage below sees it — that stage's bare-token branch stops at the
+  // space after "Bearer", so on its own it would redact only the scheme word and
+  // LEAK the token. Covers Bearer/Basic/Digest; charset includes base64 (+/=) for Basic.
+  stage.replace {
+    expression = "(?i)(bearer|basic|digest)(\\s+)[A-Za-z0-9._~+/=-]+"
+    replace    = "${1}${2}<redacted>"
+  }
+
   // key=value / key: value / "key": "value" secrets. Case-insensitive (RE2 supports
   // (?i); RE2 is linear-time so no backtracking risk). Keeps the key so the line
   // stays greppable. Group 1 captures the key (with optional surrounding quotes, so
@@ -47,14 +56,10 @@ loki.process "scrub" {
     replace    = "${1}<redacted>"
   }
 
-  // Bare tailscale auth keys (no key= prefix) and bearer tokens.
+  // Bare tailscale auth keys (no key= prefix).
   stage.replace {
     expression = "(tskey-[a-zA-Z0-9-]+)"
     replace    = "<redacted-tskey>"
-  }
-  stage.replace {
-    expression = "(?i)(bearer\\s+)[a-z0-9._-]+"
-    replace    = "${1}<redacted>"
   }
 }
 
