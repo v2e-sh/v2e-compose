@@ -38,8 +38,10 @@ services:
       - semaphore-internal
     # LAN-only API endpoint for the remote runner on control (10.1.1.10 -> 10.1.2.10:3000).
     # The VyOS firewall only allows control->services, and the public hostname stays gated.
+    # Bind to the services LAN IP so :3000 is not published on every host interface; the
+    # default is the services host IP the runner already reaches.
     ports:
-      - "3000:3000"
+      - "${SEMAPHORE_BIND_ADDR:-10.1.2.10}:3000:3000"
     environment:
       - SEMAPHORE_DB_DIALECT=postgres
       - SEMAPHORE_DB_HOST=postgres
