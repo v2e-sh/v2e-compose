@@ -26,6 +26,20 @@ scrape_configs:
   - job_name: traefik
     static_configs: [{targets: ["traefik:8082"]}]
 
+  # Log/metrics pipeline health — without these, a dead Loki/Alloy/Grafana is
+  # invisible (the compose comment's "readiness is scraped by prometheus" only holds
+  # once these jobs exist). Each self-exposes /metrics on the observability network:
+  # Loki on :3100, Grafana on :3000, Alloy on :12345 (image default listen-addr).
+  # A down target trips the existing "scrape target down" alert.
+  - job_name: loki
+    static_configs: [{targets: ["loki:3100"]}]
+
+  - job_name: grafana
+    static_configs: [{targets: ["grafana:3000"]}]
+
+  - job_name: alloy
+    static_configs: [{targets: ["alloy:12345"]}]
+
   # --- blackbox synthetic probes (see config/blackbox.yml) ---
   # The classic blackbox relabel dance: the scrape `target` is the thing to probe,
   # rewritten so Prometheus scrapes the blackbox exporter with ?module=&target=.
