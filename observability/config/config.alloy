@@ -36,13 +36,15 @@ loki.source.docker "default" {
 loki.process "scrub" {
   forward_to = [loki.write.default.receiver]
 
-  // key=value / key: value secrets. Case-insensitive (RE2 supports (?i); RE2 is
-  // linear-time so no backtracking risk). Keeps the key so the line stays greppable.
-  // The value is a non-capturing group matching a whole quoted string OR a bare
-  // token, so `password="multi word"` redacts fully (not just the first word).
+  // key=value / key: value / "key": "value" secrets. Case-insensitive (RE2 supports
+  // (?i); RE2 is linear-time so no backtracking risk). Keeps the key so the line
+  // stays greppable. Group 1 captures the key (with optional surrounding quotes, so
+  // JSON keys like "password": "x" are covered) plus the separator; the value is a
+  // non-capturing group matching a whole quoted string OR a bare token, so
+  // `password="multi word"` redacts fully (not just the first word).
   stage.replace {
-    expression = "(?i)(password|passwd|pwd|secret|token|api[_-]?key|auth[_-]?key|authorization|access[_-]?key|client[_-]?secret|private[_-]?key)(\\s*[:=]\\s*)(?:\"[^\"]*\"|'[^']*'|[^\\s,}]+)"
-    replace    = "${1}${2}<redacted>"
+    expression = "(?i)(\"?(?:password|passwd|pwd|secret|token|api[_-]?key|auth[_-]?key|authorization|access[_-]?key|client[_-]?secret|private[_-]?key)\"?\\s*[:=]\\s*)(?:\"[^\"]*\"|'[^']*'|[^\\s,}]+)"
+    replace    = "${1}<redacted>"
   }
 
   // Bare tailscale auth keys (no key= prefix) and bearer tokens.
