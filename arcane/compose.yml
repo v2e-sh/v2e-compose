@@ -72,6 +72,11 @@ services:
     cpus: 0.25
     # Host cgroup namespace so Arcane can detect its own container (upstream guidance).
     cgroup: host
+    # OIDC discovery + token exchange are BACKCHANNEL (container -> auth.int.v2e.sh):
+    # the node resolver doesn't know the internal zone (split-DNS is client-only), so
+    # pin the portal hostname at traefik's VLAN IP — same pattern as grafana/blackbox.
+    extra_hosts:
+      - "auth.int.v2e.sh:10.1.2.10"
     depends_on:
       - docker-socket-proxy
     networks:
