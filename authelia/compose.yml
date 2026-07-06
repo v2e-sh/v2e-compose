@@ -9,7 +9,10 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
-    mem_limit: 128m
+    # 256m NOT 128m: argon2id verification is memory-hard (~64MiB per login with the
+    # generated hash params) on top of the Go runtime + OIDC — at 128m the container was
+    # OOM-killed (exit 137) mid-login, taking every forward-auth-gated app down with it.
+    mem_limit: 256m
     cpus: 0.25
     networks:
       - frontend
