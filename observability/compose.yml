@@ -47,6 +47,8 @@ services:
     extra_hosts:
       - "auth.int.v2e.sh:10.1.2.10"
     environment:
+      # Land on the v2e Estate Overview instead of the empty default home.
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/dashboards/v2e-overview.json
       # Break-glass local login — keep until Authelia SSO is proven (and after, for DR).
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?set via the SOPS-rendered .env (grafana_admin_password)}
@@ -96,6 +98,14 @@ services:
     volumes:
       - ./config/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
       - ./config/grafana-alerting.yaml:/etc/grafana/provisioning/alerting/alerting.yaml:ro
+      # Git-provisioned dashboards (the "v2e — Estate Overview" glance view).
+      - ./config/grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/v2e.yaml:ro
+      - ./config/dashboards:/etc/grafana/dashboards:ro
+      # v2e branding (OSS ceiling: logo + favicon only; login-bg/colours are Enterprise).
+      # File-over-file mounts overlay the image's default assets, rebuild-safe.
+      - ./config/branding/grafana_icon.svg:/usr/share/grafana/public/img/grafana_icon.svg:ro
+      - ./config/branding/grafana_typelogo.svg:/usr/share/grafana/public/img/grafana_typelogo.svg:ro
+      - ./config/branding/fav32.png:/usr/share/grafana/public/img/fav32.png:ro
       - grafana-data:/var/lib/grafana
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/api/health || exit 1"]

@@ -1,0 +1,15 @@
+# Dashboard provisioning — loads the git-tracked JSON dashboards under
+# config/dashboards/ into a "v2e" folder. Rebuild-safe (in git, not click-ops),
+# same model as the datasource + alerting provisioning.
+apiVersion: 1
+providers:
+  - name: v2e
+    orgId: 1
+    folder: v2e
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/dashboards
+      foldersFromFilesStructure: false
