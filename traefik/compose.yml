@@ -74,7 +74,7 @@ services:
       - traefik.http.routers.dashboard.rule=Host(`traefik.${INTERNAL_DOMAIN}`)
       - traefik.http.routers.dashboard.entryPoints=websecure
       - traefik.http.routers.dashboard.service=api@internal
-      - traefik.http.routers.dashboard.middlewares=auth@docker,secure-headers@docker
+      - traefik.http.routers.dashboard.middlewares=authelia@docker,secure-headers@docker
       - traefik.http.routers.dashboard.tls.certResolver=${CERT_RESOLVER:-staging}
       - traefik.http.routers.dashboard.tls.domains[0].main=${INTERNAL_DOMAIN}
       - traefik.http.routers.dashboard.tls.domains[0].sans=*.${INTERNAL_DOMAIN}
