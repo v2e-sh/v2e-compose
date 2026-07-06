@@ -68,7 +68,9 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
-    mem_limit: 512m
+    # 384m: arcane idles ~68MiB; keep generous headroom for docker image/compose ops
+    # while trimming the node's worst-case mem_limit sum (nightly SSO-DRIFT-6).
+    mem_limit: 384m
     cpus: 0.25
     # Host cgroup namespace so Arcane can detect its own container (upstream guidance).
     cgroup: host

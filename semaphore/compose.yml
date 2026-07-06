@@ -12,7 +12,9 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
-    mem_limit: 1024m
+    # 384m: the semaphore DB is tiny (~27MiB live); 1G was wildly over-provisioned and
+    # inflated the node's worst-case mem_limit sum past a safe margin (nightly SSO-DRIFT-6).
+    mem_limit: 384m
     cpus: 1
     # Internal-only network: the DB is reachable by the semaphore service and nothing else.
     networks:

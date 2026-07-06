@@ -8,7 +8,9 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
-    mem_limit: 512m
+    # 256m: traefik idles ~22MiB even fronting the whole estate (nightly SSO-DRIFT-6
+    # mem-headroom trim); 256m keeps >10x headroom for connection/cert-renewal spikes.
+    mem_limit: 256m
     cpus: 1
     networks:
       - frontend
