@@ -62,6 +62,13 @@ services:
       # Explicit: GF_USERS_ALLOW_SIGN_UP=false above blocks OAuth user auto-creation
       # too ("unable to create user: user not found" on first SSO login without this).
       - GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP=true
+      # Link the SSO identity to the EXISTING local admin by email instead of failing
+      # on the login-name collision (grafana#111139: lookup misses, create hits the
+      # unique constraint, error surfaces as "user not found"). Single-IdP lab: email
+      # lookup here IS the desired account-linking behavior, not an exposure. The local
+      # admin's email must match the Authelia one (admin@int.v2e.sh) — one-time API
+      # update on migration, documented in the SSO-2 runbook notes.
+      - GF_AUTH_OAUTH_ALLOW_INSECURE_EMAIL_LOOKUP=true
       - GF_AUTH_GENERIC_OAUTH_CLIENT_ID=grafana
       - GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET=${GRAFANA_OIDC_CLIENT_SECRET:?set via the SOPS-rendered .env (authelia_oidc_grafana_client_secret)}
       # NO offline_access: Authelia forces an explicit consent screen for that scope
