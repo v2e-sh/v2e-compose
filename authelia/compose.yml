@@ -31,8 +31,9 @@ services:
       - AUTHELIA_IDENTITY_PROVIDERS_OIDC_CLIENTS_1_CLIENT_SECRET=${AUTHELIA_OIDC_GRAFANA_CLIENT_SECRET_HASH:?set via the SOPS-rendered .env (authelia_oidc_grafana_client_secret_hash)}
     volumes:
       - ./config/configuration.yml:/config/configuration.yml:ro
-      - ./config/users_database.yml:/config/users_database.yml:ro
-      # SOPS-provisioned, gitignored. Holds oidc.issuer.pem (RS256 private key).
+      # users_database.yml + oidc.issuer.pem are rendered out-of-band from SOPS into
+      # config/secrets/ (gitignored) by the compose_stack role — no credential hash in git.
+      - ./config/secrets/users_database.yml:/config/users_database.yml:ro
       - ./config/secrets:/config/secrets:ro
       # Writable state (sqlite db + filesystem notifier). Named volume, not a git-tracked
       # bind, mirroring the observability stack's non-root named-volume convention.
