@@ -3,6 +3,9 @@ services:
     image: docker.io/authelia/authelia:4.39.20
     cap_drop:
       - ALL
+    cap_add:  # the entrypoint su-exec's to PUID:PGID — setgroups/setuid need these.
+      - SETUID
+      - SETGID
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -13,6 +16,13 @@ services:
     environment:
       # Portal + cookie host is baked into configuration.yml (static, mounted RO).
       - TZ=UTC
+      # Run as (cap-limited) root: config/secrets are mounted read-only (the entrypoint's
+      # chown -R /config fails harmlessly) and the data volume + 0640 secret files are only
+      # readable/writable by root. no-new-privileges + the empty cap set keep it contained.
+      # A non-root run would need the data volume + secret files pre-chowned to a fixed uid
+      # — revisit at prod hardening.
+      - PUID=0
+      - PGID=0
       # --- Secrets: injected via env override (SOPS-rendered ../.env). These keys are
       #     intentionally ABSENT from configuration.yml — Authelia refuses to start if a
       #     secret is defined in BOTH the env and the YAML. ---
