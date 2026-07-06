@@ -90,6 +90,8 @@ services:
     image: grafana/alloy:v1.17.1
     cap_drop:
       - ALL
+    cap_add:  # write its data dir (owned by the image's alloy uid, not root)
+      - DAC_OVERRIDE
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -191,8 +193,9 @@ services:
     image: ghcr.io/google/cadvisor:v0.60.3
     cap_drop:
       - ALL
-    cap_add:  # read /dev/kmsg (host dmesg_restrict) for OOM/kernel events
-      - SYSLOG
+    cap_add:
+      - SYSLOG          # read /dev/kmsg (host dmesg_restrict) for OOM/kernel events
+      - DAC_READ_SEARCH # read cgroupfs subtrees owned by other uids (systemd user slices)
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
