@@ -37,7 +37,12 @@ authentication_backend:
 session:
   # secret: injected via AUTHELIA_SESSION_SECRET
   # Single-domain, single-node: NO redis block -> Authelia uses the in-memory session
-  # provider automatically (sessions drop on container restart -> re-login; acceptable).
+  # provider automatically (sessions drop on container restart -> re-login). DECIDED
+  # 2026-07-05: in-memory for now.
+  # REDIS LATER: if restart re-logins get annoying, add a `redis:` block here + a hardened
+  # redis:7-alpine container (internal net, cap_drop:[ALL], no published ports, password
+  # from SOPS). OIDC consent/refresh tokens already persist in SQLite, so only the browser
+  # session cookie is lost on restart today.
   cookies:
     - domain: 'int.v2e.sh'
       authelia_url: 'https://auth.int.v2e.sh'

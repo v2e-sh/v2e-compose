@@ -183,3 +183,39 @@ _Grafana moves to generic OAuth (Authelia) and drops forward-auth. Adds GF_AUTH_
 - Auth strength: start at one_factor everywhere to match TinyAuth's single-factor behavior (chosen here), then raise sensitive hosts to two_factor? Or go two_factor from day one (forces TOTP enrollment before first access)?
 - Sessions are in-memory (single node, no Redis) so an authelia restart drops all sessions and forces re-login. Acceptable for the lab, or add a Redis session backend (extra internal network + container)?
 - Middleware naming: this keeps the steady-state name `authelia@docker` (apps get relabeled once). If you'd rather preserve the backend-neutral `auth@docker` name long-term, that's a second relabel pass after tinyauth is gone — confirm preference.
+
+---
+
+## Decisions locked (2026-07-05)
+
+1. **Auth strength: `one_factor` for now** — matches TinyAuth's single-factor behavior. `access_control` is already `default_policy: deny` + `*.int.v2e.sh: one_factor`. Raise sensitive hosts (traefik dashboard, arcane) to `two_factor` later, once TOTP is enrolled.
+2. **Sessions: in-memory now, Redis later** — see the `REDIS LATER` note in `config/configuration.yml`. OIDC state persists in SQLite; only the browser cookie drops on an Authelia restart.
+3. **Group taxonomy confirmed:** `admins` / `arcane-admins` / `grafana-admins` / `grafana-editors`. The admin user in `users_database.yml` holds `admins,arcane-admins,grafana-admins`; add `grafana-editors` to non-admin editor users as needed.
+4. **RS256 issuer key rendered from SOPS** — provisioning task below (closes review must-fix #4).
+
+## RS256 issuer-key provisioning (implements decision #4)
+
+`authelia_oidc_issuer_key` (the multiline RS256 PEM) can't be a `.env` value, so the `compose_stack` role renders it to the mounted `config/secrets/oidc.issuer.pem`. Add this to `roles/compose_stack/tasks/main.yml` **after the git-clone task**, gated on the authelia stack. `authelia/config/secrets/` is already gitignored (see `authelia/.gitignore`), so the untracked PEM survives repo pulls.
+
+```yaml
+- name: Provision the Authelia OIDC issuer key (RS256 PEM) from SOPS
+  when: "'authelia' in compose_stack_stacks"
+  block:
+    - name: Ensure the Authelia secrets dir exists (0700)
+      ansible.builtin.file:
+        path: "{{ compose_stack_dir }}/authelia/config/secrets"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+    - name: Render the OIDC issuer private key (0600, never logged)
+      ansible.builtin.copy:
+        content: "{{ authelia_oidc_issuer_key }}"
+        dest: "{{ compose_stack_dir }}/authelia/config/secrets/oidc.issuer.pem"
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+```
+
+Generate the key (decision #4): `docker run --rm -v "$PWD:/keys" authelia/authelia:4.39.20 authelia crypto pair rsa generate --bits 4096 --directory /keys`, then put the **private** key PEM into SOPS as `authelia_oidc_issuer_key`.
