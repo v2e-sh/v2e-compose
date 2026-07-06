@@ -22,10 +22,15 @@ jobs:
           ACME_EMAIL=a@b.c
           CERT_RESOLVER=staging
           CF_DNS_API_TOKEN=dummy
-          TINYAUTH_AUTH_USERS=dummy
           ARCANE_ENCRYPTION_KEY=dummy
           ARCANE_JWT_SECRET=dummy
+          ARCANE_OIDC_CLIENT_SECRET=dummy
+          AUTHELIA_SESSION_SECRET=dummy
+          AUTHELIA_STORAGE_ENCRYPTION_KEY=dummy
+          AUTHELIA_RESET_PASSWORD_JWT_SECRET=dummy
+          AUTHELIA_OIDC_HMAC_SECRET=dummy
           GRAFANA_ADMIN_PASSWORD=dummy
+          GRAFANA_OIDC_CLIENT_SECRET=dummy
           MULLVAD_WIREGUARD_PRIVATE_KEY=dummy
           MULLVAD_WIREGUARD_ADDRESSES=10.0.0.2/32
           SEMAPHORE_DB_PASS=dummy
@@ -35,8 +40,8 @@ jobs:
           TAILSCALE_AUTHKEY=dummy
           TECHNITIUM_ADMIN_PASSWORD=dummy
           EOF
-          for stack in arcane mullvad-exit observability rustdesk semaphore \
-                       technitium tinyauth traefik whoami; do
+          for stack in arcane authelia mullvad-exit observability rustdesk semaphore \
+                       technitium traefik whoami; do
             echo "::group::$stack"
             docker compose --env-file "$RUNNER_TEMP/ci.env" -f "$stack/compose.yml" config -q
             echo "::endgroup::"
