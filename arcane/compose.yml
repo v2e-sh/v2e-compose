@@ -1,4 +1,59 @@
 services:
+  # Filtering proxy in front of the Docker socket (H2). Arcane reaches Docker over
+  # TCP through this instead of bind-mounting the raw RW socket, so a compromise of
+  # the web app can only reach the allowlisted API groups below — never the raw
+  # root-equivalent socket. This is Arcane's officially documented hardening path
+  # (DOCKER_HOST -> proxy). The proxy sits on an internal (no-egress) network.
+  docker-socket-proxy:
+    image: ghcr.io/tecnativa/docker-socket-proxy:v0.4.2
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /var/lib/haproxy
+      - /run
+    cap_drop:
+      - ALL
+    cap_add:  # haproxy setuid-drops to non-root then reads the root:docker socket
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 64m
+    cpus: 0.1
+    environment:
+      # Telemetry the dashboard needs.
+      - EVENTS=1
+      - PING=1
+      - VERSION=1
+      - INFO=1
+      # Resource groups Arcane manages (the Dockge-replacement role).
+      - CONTAINERS=1
+      - IMAGES=1
+      - NETWORKS=1
+      - VOLUMES=1
+      - EXEC=1
+      # POST=1 enables write/mutating actions (start/stop/create/delete). Drop to 0
+      # for a read-only Arcane. Everything else is default-deny (0) below.
+      - POST=1
+      - AUTH=0
+      - SECRETS=0
+      - BUILD=0
+      - COMMIT=0
+      - CONFIGS=0
+      - DISTRIBUTION=0
+      - NODES=0
+      - PLUGINS=0
+      - SERVICES=0
+      - SESSION=0
+      - SWARM=0
+      - SYSTEM=0
+      - TASKS=0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - arcane-internal
+
   arcane:
     image: ghcr.io/getarcaneapp/manager:v2.3.0
     cap_drop:
@@ -16,8 +71,11 @@ services:
     cpus: 0.25
     # Host cgroup namespace so Arcane can detect its own container (upstream guidance).
     cgroup: host
+    depends_on:
+      - docker-socket-proxy
     networks:
       - frontend
+      - arcane-internal # reach the socket proxy
     environment:
       - ENVIRONMENT=production
       - APP_URL=https://arcane.${INTERNAL_DOMAIN}
@@ -25,14 +83,14 @@ services:
       - TRUSTED_PROXIES=172.16.0.0/12
       - ENCRYPTION_KEY=${ARCANE_ENCRYPTION_KEY:?set via the SOPS-rendered .env (arcane_encryption_key)}
       - JWT_SECRET=${ARCANE_JWT_SECRET:?set via the SOPS-rendered .env (arcane_jwt_secret)}
+      # Reach Docker through the filtering proxy, NOT a bind-mounted socket (H2).
+      - DOCKER_HOST=tcp://docker-socket-proxy:2375
       # Where Arcane looks for compose projects — the deployed v2e stacks themselves
       # (this is the Dockge-replacement role: view/manage the running stacks).
       - PROJECTS_DIRECTORY=/opt/v2e-compose
       - TZ=UTC
     volumes:
-      # Arcane manages the local Docker engine. Full socket by design; if this ever needs
-      # tightening, upstream ships a docker-socket-proxy example (docker/examples/compose.proxy.yaml).
-      - /var/run/docker.sock:/var/run/docker.sock
+      # No docker.sock mount — Docker access is via DOCKER_HOST -> docker-socket-proxy.
       - ./data:/app/data
       - /opt/v2e-compose:/opt/v2e-compose
     healthcheck:
@@ -43,8 +101,9 @@ services:
       start_period: 15s
     labels:
       - traefik.enable=true
-      # Gated: TinyAuth forward-auth in front of Arcane's own login. Default first-boot
-      # login is admin/password — change it immediately in the UI.
+      # Gated: TinyAuth forward-auth in front of Arcane's own login. NOTE: the v2.3.0
+      # first-boot login is arcane/arcane-admin — change it immediately in the UI
+      # (there is no env to preseed it; OIDC-only is the alternative, see docs).
       - traefik.http.routers.arcane.rule=Host(`arcane.${INTERNAL_DOMAIN}`)
       - traefik.http.routers.arcane.entryPoints=websecure
       - traefik.http.routers.arcane.tls=true
@@ -54,3 +113,8 @@ services:
 networks:
   frontend:
     external: true
+  # No route off-host: the proxy only needs the local socket + Arcane. Arcane keeps
+  # its own egress via `frontend`; image pulls run on the host daemon, not this net.
+  arcane-internal:
+    driver: bridge
+    internal: true
