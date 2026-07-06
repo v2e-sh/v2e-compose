@@ -1,7 +1,8 @@
 # blackbox_exporter modules — synthetic probes whose results Prometheus scrapes and
 # Grafana alerts on. Declarative (unlike Uptime Kuma's click-ops), so the whole
-# alerting surface lives in git. Three probe classes are used (targets in prometheus.yml):
+# alerting surface lives in git. Probe classes used (targets in prometheus.yml):
 #   https_cert  → TLS handshake to the app endpoints; exposes probe_ssl_earliest_cert_expiry
+#   http_200    → real HTTP 200 through Traefik->Authelia; auth-portal end-to-end health
 #   dns_int     → resolves an int.v2e.sh name against Technitium; catches DNS death
 #   icmp_node   → pings tailnet peers (control/home/mullvad) for subnet-router/exit health
 modules:
@@ -14,6 +15,19 @@ modules:
     http:
       method: GET
       valid_status_codes: []          # any response = endpoint alive; 401 from TinyAuth is fine
+      fail_if_not_ssl: true
+      tls_config:
+        insecure_skip_verify: true
+      preferred_ip_protocol: ip4
+
+  # Auth-portal health: must get a real HTTP 200 (through Traefik -> Authelia). Unlike
+  # https_cert (any status = alive), this fails if the auth path is broken end to end.
+  http_200:
+    prober: http
+    timeout: 8s
+    http:
+      method: GET
+      valid_status_codes: [200]
       fail_if_not_ssl: true
       tls_config:
         insecure_skip_verify: true

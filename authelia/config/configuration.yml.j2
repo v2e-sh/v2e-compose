@@ -8,6 +8,13 @@ server:
   # Leave the built-in healthcheck active (homelab, not a restrictive K8s env).
   disable_healthcheck: false
 
+# Prometheus metrics on :9959/metrics — Authelia is the sole auth gate (SPOF), so
+# it must be scraped + alerted. Reached by Prometheus over the shared frontend network.
+telemetry:
+  metrics:
+    enabled: true
+    address: 'tcp://:9959/metrics'
+
 log:
   level: 'info'
   format: 'text'

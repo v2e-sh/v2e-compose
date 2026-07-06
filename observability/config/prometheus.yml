@@ -40,17 +40,37 @@ scrape_configs:
   - job_name: alloy
     static_configs: [{targets: ["alloy:12345"]}]
 
+  # Authelia — the sole auth gate (SPOF). Metrics on :9959, reached over the shared
+  # frontend network (both authelia and prometheus are on it). A down target trips the
+  # dedicated AutheliaDown alert (grafana-alerting.yaml), not just the generic one.
+  - job_name: authelia
+    static_configs: [{targets: ["authelia:9959"]}]
+
   # --- blackbox synthetic probes (see config/blackbox.yml) ---
   # The classic blackbox relabel dance: the scrape `target` is the thing to probe,
   # rewritten so Prometheus scrapes the blackbox exporter with ?module=&target=.
 
   # TLS cert expiry. Probing one *.int.v2e.sh host covers the shared wildcard cert;
-  # the exposed probe_ssl_earliest_cert_expiry drives the cert-expiry alert.
+  # the exposed probe_ssl_earliest_cert_expiry drives the cert-expiry alert. Target is
+  # the auth portal — the most critical + stable endpoint (whoami now 302s to it anyway).
   - job_name: blackbox-cert
     metrics_path: /probe
     params: {module: [https_cert]}
     static_configs:
-      - targets: ["https://whoami.int.v2e.sh"]
+      - targets: ["https://auth.int.v2e.sh"]
+    relabel_configs:
+      - {source_labels: [__address__], target_label: __param_target}
+      - {source_labels: [__param_target], target_label: instance}
+      - {target_label: __address__, replacement: "blackbox-exporter:9115"}
+
+  # Auth-portal end-to-end health: HTTP 200 from Authelia's /api/health THROUGH Traefik
+  # (traefik route -> authelia). Catches a broken auth path even when the container looks
+  # up. Drives the AutheliaPortalDown alert.
+  - job_name: blackbox-authportal
+    metrics_path: /probe
+    params: {module: [http_200]}
+    static_configs:
+      - targets: ["https://auth.int.v2e.sh/api/health"]
     relabel_configs:
       - {source_labels: [__address__], target_label: __param_target}
       - {source_labels: [__param_target], target_label: instance}

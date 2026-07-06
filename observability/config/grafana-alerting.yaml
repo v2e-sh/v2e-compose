@@ -180,3 +180,61 @@ groups:
         labels: {severity: warning}
         annotations:
           summary: "services host memory under 10% available — OOM risk on the app estate"
+
+      # --- Authelia scrape down (the sole auth gate — SPOF). up==0 means the metrics
+      # endpoint is unreachable: container down, crash-looping, or OOM-killed. ---
+      - uid: authelia-down
+        title: Authelia is down (auth gate)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              expr: min(up{job="authelia"}) or vector(0)
+              refId: A
+              instant: true
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model:
+              type: threshold
+              refId: C
+              expression: A
+              conditions:
+                - evaluator: {params: [1], type: lt}
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "Authelia metrics unreachable — every forward-auth app + OIDC login is at risk"
+
+      # --- Auth-portal end-to-end down (blackbox 200 through Traefik -> Authelia).
+      # Catches a broken auth PATH even if the container process looks alive. ---
+      - uid: authelia-portal-down
+        title: Auth portal not returning 200
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              expr: min(probe_success{job="blackbox-authportal"}) or vector(1)
+              refId: A
+              instant: true
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model:
+              type: threshold
+              refId: C
+              expression: A
+              conditions:
+                - evaluator: {params: [1], type: lt}
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "auth.int.v2e.sh is not returning HTTP 200 — the login portal is broken"
