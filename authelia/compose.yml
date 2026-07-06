@@ -31,13 +31,10 @@ services:
       - AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET=${AUTHELIA_RESET_PASSWORD_JWT_SECRET:?set via the SOPS-rendered .env (authelia_reset_password_jwt_secret)}
       # --- OIDC provider secrets ---
       - AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET=${AUTHELIA_OIDC_HMAC_SECRET:?set via the SOPS-rendered .env (authelia_oidc_hmac_secret)}
-      # NOTE: the RS256 issuer key is INLINED into the rendered configuration.yml (Authelia's
-      # *_FILE secret doesn't apply to a jwks list item) — see the templated config below.
-      # Per-client HASHED secrets (pbkdf2-sha512). Index MUST match the clients order in
-      # configuration.yml: 0 = arcane, 1 = grafana. The PLAINTEXT of these lives in the
-      # arcane/grafana stacks (ARCANE_OIDC_CLIENT_SECRET / GRAFANA_OIDC_CLIENT_SECRET).
-      - AUTHELIA_IDENTITY_PROVIDERS_OIDC_CLIENTS_0_CLIENT_SECRET=${AUTHELIA_OIDC_ARCANE_CLIENT_SECRET_HASH:?set via the SOPS-rendered .env (authelia_oidc_arcane_client_secret_hash)}
-      - AUTHELIA_IDENTITY_PROVIDERS_OIDC_CLIENTS_1_CLIENT_SECRET=${AUTHELIA_OIDC_GRAFANA_CLIENT_SECRET_HASH:?set via the SOPS-rendered .env (authelia_oidc_grafana_client_secret_hash)}
+      # NOTE: the RS256 issuer key AND the per-client secret HASHES are INLINED into the
+      # rendered configuration.yml from SOPS (Authelia's env override doesn't honor jwks/
+      # client list indices) — see the templated config. The RP plaintext client secrets
+      # (ARCANE_/GRAFANA_OIDC_CLIENT_SECRET) live in those stacks, added at migration.
     volumes:
       # configuration.yml (with the inlined RS256 key) + users_database.yml are rendered
       # out-of-band from SOPS into config/secrets/ (gitignored) by the compose_stack role —
