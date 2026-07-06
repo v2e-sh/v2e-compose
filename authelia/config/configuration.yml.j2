@@ -114,7 +114,8 @@ identity_providers:
       # --- index 0: ARCANE (secret hash injected via ..._CLIENTS_0_CLIENT_SECRET) ---
       - client_id: 'arcane'
         client_name: 'Arcane'
-        # client_secret: injected via AUTHELIA_IDENTITY_PROVIDERS_OIDC_CLIENTS_0_CLIENT_SECRET
+        # pbkdf2 hash inlined from SOPS (Authelia's env override doesn't honor list indices).
+        client_secret: '{{ authelia_oidc_arcane_client_secret_hash }}'
         public: false
         authorization_policy: 'one_factor'
         consent_mode: 'implicit'
@@ -140,7 +141,8 @@ identity_providers:
       # --- index 1: GRAFANA (secret hash injected via ..._CLIENTS_1_CLIENT_SECRET) ---
       - client_id: 'grafana'
         client_name: 'Grafana'
-        # client_secret: injected via AUTHELIA_IDENTITY_PROVIDERS_OIDC_CLIENTS_1_CLIENT_SECRET
+        # pbkdf2 hash inlined from SOPS (Authelia's env override doesn't honor list indices).
+        client_secret: '{{ authelia_oidc_grafana_client_secret_hash }}'
         public: false
         authorization_policy: 'one_factor'
         consent_mode: 'implicit'
