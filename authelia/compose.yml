@@ -48,6 +48,9 @@ services:
       # path must match the role's authelia_secrets_dir default.
       - /opt/authelia-secrets/configuration.yml:/config/configuration.yml:ro
       - /opt/authelia-secrets/users_database.yml:/config/users_database.yml:ro
+      # v2e branding: server.asset_path=/config/assets serves logo.png (hexagon mark) +
+      # favicon.ico on the login portal. Git-tracked (public brand assets, no secrets).
+      - ./assets:/config/assets:ro
       # Writable state (sqlite db + filesystem notifier). Named volume, not a git-tracked
       # bind, mirroring the observability stack's non-root named-volume convention.
       - authelia-data:/data
