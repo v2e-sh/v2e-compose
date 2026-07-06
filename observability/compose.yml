@@ -55,7 +55,10 @@ services:
       - GF_AUTH_GENERIC_OAUTH_NAME=Authelia
       - GF_AUTH_GENERIC_OAUTH_CLIENT_ID=grafana
       - GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET=${GRAFANA_OIDC_CLIENT_SECRET:?set via the SOPS-rendered .env (authelia_oidc_grafana_client_secret)}
-      - GF_AUTH_GENERIC_OAUTH_SCOPES=openid profile email groups offline_access
+      # NO offline_access: Authelia forces an explicit consent screen for that scope
+      # regardless of consent_mode (live-verified). On token expiry Grafana just
+      # re-runs the instant SSO redirect instead.
+      - GF_AUTH_GENERIC_OAUTH_SCOPES=openid profile email groups
       - GF_AUTH_GENERIC_OAUTH_AUTH_URL=https://auth.${INTERNAL_DOMAIN}/api/oidc/authorization
       - GF_AUTH_GENERIC_OAUTH_TOKEN_URL=https://auth.${INTERNAL_DOMAIN}/api/oidc/token
       - GF_AUTH_GENERIC_OAUTH_API_URL=https://auth.${INTERNAL_DOMAIN}/api/oidc/userinfo
@@ -63,8 +66,6 @@ services:
       - GF_AUTH_GENERIC_OAUTH_GROUPS_ATTRIBUTE_PATH=groups
       - GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH=contains(groups[*], 'grafana-admins') && 'Admin' || contains(groups[*], 'grafana-editors') && 'Editor' || 'Viewer'
       - GF_AUTH_GENERIC_OAUTH_ALLOW_ASSIGN_GRAFANA_ADMIN=true
-      # offline_access is inert without this (review note): actually rotate via refresh tokens.
-      - GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN=true
       # Authelia client uses token_endpoint_auth_method client_secret_basic -> credentials
       # in the Authorization header, not the POST body.
       - GF_AUTH_GENERIC_OAUTH_AUTH_STYLE=InHeader
