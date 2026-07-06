@@ -238,3 +238,26 @@ groups:
         labels: {severity: critical}
         annotations:
           summary: "auth.int.v2e.sh is not returning HTTP 200 — the login portal is broken"
+
+# --- Contact point + default policy (E3): route every alert to the self-hosted ntfy
+# (previously the rules fired into the void). Grafana POSTs its alert JSON to the
+# v2e-alerts topic over the observability network; subscribe from a phone/browser at
+# https://ntfy.int.v2e.sh (Authelia-gated) -> topic "v2e-alerts".
+contactPoints:
+  - orgId: 1
+    name: ntfy
+    receivers:
+      - uid: ntfy-v2e-alerts
+        type: webhook
+        settings:
+          url: http://ntfy:8080/v2e-alerts
+          httpMethod: POST
+        disableResolveMessage: false
+
+policies:
+  - orgId: 1
+    receiver: ntfy
+    group_by: ['grafana_folder', 'alertname']
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h
