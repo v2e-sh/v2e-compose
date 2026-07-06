@@ -132,7 +132,6 @@ identity_providers:
           - 'groups'
         grant_types:
           - 'authorization_code'
-          - 'refresh_token'
         response_types:
           - 'code'
         response_modes:
@@ -150,15 +149,17 @@ identity_providers:
         claims_policy: 'with_groups'
         redirect_uris:
           - 'https://grafana.int.v2e.sh/login/generic_oauth'
+        # NO offline_access/refresh_token: Authelia requires EXPLICIT consent for
+        # offline_access regardless of consent_mode (live-verified: the grafana flow
+        # stalled on the consent screen while arcane sailed through implicitly). A lab
+        # SSO re-redirect on token expiry beats a consent prompt on every login.
         scopes:
           - 'openid'
           - 'profile'
           - 'email'
           - 'groups'
-          - 'offline_access'
         grant_types:
           - 'authorization_code'
-          - 'refresh_token'
         response_types:
           - 'code'
         response_modes:
