@@ -212,11 +212,11 @@ services:
     networks:
       - observability
       - frontend
-    # Deterministic resolution for the cert probe — don't depend on the container
-    # resolver knowing int.v2e.sh; point the probed hostname straight at traefik so
-    # SNI (whoami.int.v2e.sh) still selects the wildcard cert we're checking.
+    # Deterministic resolution for the HTTP probes — the services host resolver doesn't
+    # know int.v2e.sh, so pin the probed hostname straight at traefik. SNI still selects
+    # the wildcard cert. auth.int.v2e.sh is both the cert-probe and auth-portal-probe target.
     extra_hosts:
-      - "whoami.int.v2e.sh:10.1.2.10"
+      - "auth.int.v2e.sh:10.1.2.10"
     volumes:
       - ./config/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
 
