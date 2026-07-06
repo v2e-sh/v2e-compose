@@ -31,20 +31,19 @@ services:
       - AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET=${AUTHELIA_RESET_PASSWORD_JWT_SECRET:?set via the SOPS-rendered .env (authelia_reset_password_jwt_secret)}
       # --- OIDC provider secrets ---
       - AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET=${AUTHELIA_OIDC_HMAC_SECRET:?set via the SOPS-rendered .env (authelia_oidc_hmac_secret)}
-      # RS256 issuer private key (multiline PEM) — cannot live in an env-file, so it is a
-      # mounted, gitignored file provisioned out-of-band by SOPS/Ansible (see ./config/secrets/).
-      - AUTHELIA_IDENTITY_PROVIDERS_OIDC_JWKS_0_KEY_FILE=/config/secrets/oidc.issuer.pem
+      # NOTE: the RS256 issuer key is INLINED into the rendered configuration.yml (Authelia's
+      # *_FILE secret doesn't apply to a jwks list item) — see the templated config below.
       # Per-client HASHED secrets (pbkdf2-sha512). Index MUST match the clients order in
       # configuration.yml: 0 = arcane, 1 = grafana. The PLAINTEXT of these lives in the
       # arcane/grafana stacks (ARCANE_OIDC_CLIENT_SECRET / GRAFANA_OIDC_CLIENT_SECRET).
       - AUTHELIA_IDENTITY_PROVIDERS_OIDC_CLIENTS_0_CLIENT_SECRET=${AUTHELIA_OIDC_ARCANE_CLIENT_SECRET_HASH:?set via the SOPS-rendered .env (authelia_oidc_arcane_client_secret_hash)}
       - AUTHELIA_IDENTITY_PROVIDERS_OIDC_CLIENTS_1_CLIENT_SECRET=${AUTHELIA_OIDC_GRAFANA_CLIENT_SECRET_HASH:?set via the SOPS-rendered .env (authelia_oidc_grafana_client_secret_hash)}
     volumes:
-      - ./config/configuration.yml:/config/configuration.yml:ro
-      # users_database.yml + oidc.issuer.pem are rendered out-of-band from SOPS into
-      # config/secrets/ (gitignored) by the compose_stack role — no credential hash in git.
+      # configuration.yml (with the inlined RS256 key) + users_database.yml are rendered
+      # out-of-band from SOPS into config/secrets/ (gitignored) by the compose_stack role —
+      # no key/hash in git. config/configuration.yml.j2 is the tracked template.
+      - ./config/secrets/configuration.yml:/config/configuration.yml:ro
       - ./config/secrets/users_database.yml:/config/users_database.yml:ro
-      - ./config/secrets:/config/secrets:ro
       # Writable state (sqlite db + filesystem notifier). Named volume, not a git-tracked
       # bind, mirroring the observability stack's non-root named-volume convention.
       - authelia-data:/data

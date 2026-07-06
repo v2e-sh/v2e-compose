@@ -85,11 +85,15 @@ identity_providers:
   oidc:
     # hmac_secret: injected via AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET
     jwks:
-      # key: injected via AUTHELIA_IDENTITY_PROVIDERS_OIDC_JWKS_0_KEY_FILE
-      # (mounted /config/secrets/oidc.issuer.pem). At least one RS256 sig key is mandatory.
+      # RS256 issuer key INLINED from SOPS at deploy time. This file is an Ansible
+      # template rendered out-of-band to config/secrets/configuration.yml (gitignored) —
+      # the key never lands in git. Authelia's *_FILE env secret does not apply to a jwks
+      # list item, so the key must be provided inline. At least one RS256 sig key is required.
       - key_id: 'main'
         algorithm: 'RS256'
         use: 'sig'
+        key: |
+{{ authelia_oidc_issuer_key | indent(10, first=True) }}
     lifespans:
       access_token: '1h'
       authorize_code: '1m'
