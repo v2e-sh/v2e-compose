@@ -101,11 +101,9 @@ services:
       # Git-provisioned dashboards (the "v2e — Estate Overview" glance view).
       - ./config/grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/v2e.yaml:ro
       - ./config/dashboards:/etc/grafana/dashboards:ro
-      # v2e branding (OSS ceiling: logo + favicon only; login-bg/colours are Enterprise).
-      # File-over-file mounts overlay the image's default assets, rebuild-safe.
-      - ./config/branding/grafana_icon.svg:/usr/share/grafana/public/img/grafana_icon.svg:ro
-      - ./config/branding/grafana_typelogo.svg:/usr/share/grafana/public/img/grafana_typelogo.svg:ro
-      - ./config/branding/fav32.png:/usr/share/grafana/public/img/fav32.png:ro
+      # NOTE: no logo branding — Grafana 13 renders its login/nav logo from the compiled
+      # React frontend, so replacing public/img/grafana_icon.svg has no visible effect on
+      # OSS. Real branding is Enterprise white-labeling only. Not worth carrying dead mounts.
       - grafana-data:/var/lib/grafana
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/api/health || exit 1"]
