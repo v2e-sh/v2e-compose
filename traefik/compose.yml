@@ -1,6 +1,10 @@
 services:
   traefik:
     image: traefik:v3.7.6
+    cap_drop:
+      - ALL
+    cap_add:  # bind :80/:443
+      - NET_BIND_SERVICE
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true

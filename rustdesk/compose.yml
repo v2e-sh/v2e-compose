@@ -5,6 +5,8 @@
 services:
   hbbs:
     image: rustdesk/rustdesk-server:1.1.15
+    cap_drop:
+      - ALL
     command: hbbs
     restart: unless-stopped
     security_opt:
@@ -21,6 +23,8 @@ services:
 
   hbbr:
     image: rustdesk/rustdesk-server:1.1.15
+    cap_drop:
+      - ALL
     command: hbbr
     restart: unless-stopped
     security_opt:
