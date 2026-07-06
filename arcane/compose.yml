@@ -9,6 +9,7 @@ services:
     restart: unless-stopped
     read_only: true
     tmpfs:
+      - /tmp          # entrypoint renders /tmp/haproxy.cfg here
       - /var/lib/haproxy
       - /run
     cap_drop:
