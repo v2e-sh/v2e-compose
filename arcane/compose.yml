@@ -72,6 +72,11 @@ services:
     cpus: 0.25
     # Host cgroup namespace so Arcane can detect its own container (upstream guidance).
     cgroup: host
+    # OIDC discovery + token exchange are BACKCHANNEL (container -> auth.int.v2e.sh):
+    # the node resolver doesn't know the internal zone (split-DNS is client-only), so
+    # pin the portal hostname at traefik's VLAN IP — same pattern as grafana/blackbox.
+    extra_hosts:
+      - "auth.int.v2e.sh:10.1.2.10"
     depends_on:
       - docker-socket-proxy
     networks:
@@ -90,6 +95,19 @@ services:
       # (this is the Dockge-replacement role: view/manage the running stacks).
       - PROJECTS_DIRECTORY=/opt/v2e-compose
       - TZ=UTC
+      # SSO via Authelia OIDC (closes H3: local-password-only). The router drops
+      # forward-auth: OIDC gates Arcane directly (both together would double-gate/loop).
+      - OIDC_ENABLED=true
+      - OIDC_ISSUER_URL=https://auth.${INTERNAL_DOMAIN}
+      - OIDC_CLIENT_ID=arcane
+      - OIDC_CLIENT_SECRET=${ARCANE_OIDC_CLIENT_SECRET:?set via the SOPS-rendered .env (authelia_oidc_arcane_client_secret)}
+      - OIDC_SCOPES=openid email profile groups
+      - OIDC_GROUPS_CLAIM=groups
+      - OIDC_ROLE_MAPPINGS=[{"claimValue":"arcane-admins","roleId":"role_admin"}]
+      # Local login stays ENABLED (break-glass) until OIDC + the arcane-admins->role_admin
+      # mapping are verified. Then disable local login via Settings > Security (the
+      # AUTH_LOCAL_ENABLED env var is undocumented in v2.3.0 — use the UI toggle) and
+      # optionally set OIDC_AUTO_REDIRECT_TO_PROVIDER=true here.
     volumes:
       # No docker.sock mount — Docker access is via DOCKER_HOST -> docker-socket-proxy.
       - ./data:/app/data
@@ -102,13 +120,13 @@ services:
       start_period: 15s
     labels:
       - traefik.enable=true
-      # Gated: TinyAuth forward-auth in front of Arcane's own login. NOTE: the v2.3.0
-      # first-boot login is arcane/arcane-admin — change it immediately in the UI
-      # (there is no env to preseed it; OIDC-only is the alternative, see docs).
+      # No forward-auth: Arcane authenticates via Authelia OIDC directly. NOTE: the
+      # v2.3.0 first-boot LOCAL login is arcane/arcane-admin — change it immediately in
+      # the UI (no env to preseed it); local login is the break-glass until OIDC-only.
       - traefik.http.routers.arcane.rule=Host(`arcane.${INTERNAL_DOMAIN}`)
       - traefik.http.routers.arcane.entryPoints=websecure
       - traefik.http.routers.arcane.tls=true
-      - traefik.http.routers.arcane.middlewares=auth@docker,secure-headers@docker
+      - traefik.http.routers.arcane.middlewares=secure-headers@docker
       - traefik.http.services.arcane.loadbalancer.server.port=3552
 
 networks:
