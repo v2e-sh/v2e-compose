@@ -40,6 +40,12 @@ services:
     networks:
       - observability
       - frontend
+    # The OAuth token/userinfo calls are BACKCHANNEL (container -> auth.int.v2e.sh):
+    # the node's resolver doesn't know the internal zone (only clients with split-DNS
+    # do), so pin the portal hostname at traefik's VLAN IP — same pattern as the
+    # blackbox-exporter cert probes. TLS stays valid (LE wildcard via SNI).
+    extra_hosts:
+      - "auth.int.v2e.sh:10.1.2.10"
     environment:
       # Break-glass local login — keep until Authelia SSO is proven (and after, for DR).
       - GF_SECURITY_ADMIN_USER=admin
