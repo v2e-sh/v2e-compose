@@ -35,7 +35,11 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
-    mem_limit: 240m
+    # 512m (was 240m): 240 OOM-killed grafana (exit 137) once it became a real dashboard
+    # host — the Estate Overview (13 panels, default home, 30s refresh) spikes render/query
+    # memory past 240 on load. Uses part of the headroom freed by the postgres/traefik/arcane
+    # trims. GOMEMLIMIT gives the Go runtime a soft target below the cgroup hard limit.
+    mem_limit: 512m
     cpus: 0.5
     networks:
       - observability
@@ -47,6 +51,8 @@ services:
     extra_hosts:
       - "auth.int.v2e.sh:10.1.2.10"
     environment:
+      # Go soft memory target below the 512m cgroup limit so the runtime GCs before an OOM.
+      - GOMEMLIMIT=460MiB
       # Land on the v2e Estate Overview instead of the empty default home.
       - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/dashboards/v2e-overview.json
       # Break-glass local login — keep until Authelia SSO is proven (and after, for DR).
