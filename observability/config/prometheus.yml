@@ -25,3 +25,58 @@ scrape_configs:
   # traefik's dedicated metrics entrypoint (:8082, not published to the host).
   - job_name: traefik
     static_configs: [{targets: ["traefik:8082"]}]
+
+  # Log/metrics pipeline health — without these, a dead Loki/Alloy/Grafana is
+  # invisible (the compose comment's "readiness is scraped by prometheus" only holds
+  # once these jobs exist). Each self-exposes /metrics on the observability network:
+  # Loki on :3100, Grafana on :3000, Alloy on :12345 (image default listen-addr).
+  # A down target trips the existing "scrape target down" alert.
+  - job_name: loki
+    static_configs: [{targets: ["loki:3100"]}]
+
+  - job_name: grafana
+    static_configs: [{targets: ["grafana:3000"]}]
+
+  - job_name: alloy
+    static_configs: [{targets: ["alloy:12345"]}]
+
+  # --- blackbox synthetic probes (see config/blackbox.yml) ---
+  # The classic blackbox relabel dance: the scrape `target` is the thing to probe,
+  # rewritten so Prometheus scrapes the blackbox exporter with ?module=&target=.
+
+  # TLS cert expiry. Probing one *.int.v2e.sh host covers the shared wildcard cert;
+  # the exposed probe_ssl_earliest_cert_expiry drives the cert-expiry alert.
+  - job_name: blackbox-cert
+    metrics_path: /probe
+    params: {module: [https_cert]}
+    static_configs:
+      - targets: ["https://whoami.int.v2e.sh"]
+    relabel_configs:
+      - {source_labels: [__address__], target_label: __param_target}
+      - {source_labels: [__param_target], target_label: instance}
+      - {target_label: __address__, replacement: "blackbox-exporter:9115"}
+
+  # Internal DNS health: does Technitium still resolve an int.v2e.sh name?
+  - job_name: blackbox-dns
+    metrics_path: /probe
+    params: {module: [dns_int]}
+    static_configs:
+      - targets: ["10.1.0.10"]        # Technitium on infra
+    relabel_configs:
+      - {source_labels: [__address__], target_label: __param_target}
+      - {source_labels: [__param_target], target_label: instance}
+      - {target_label: __address__, replacement: "blackbox-exporter:9115"}
+
+  # Tailnet node/exit-node liveness (control, home, mullvad). GATED: the services host
+  # is not on the tailnet yet, so these 100.x targets are unreachable from here. Enable
+  # together with cross-node metrics once services joins the tailnet (see HANDOVER
+  # backlog G) — then uncomment and add node-exporter tailnet scrape jobs alongside.
+  # - job_name: blackbox-tailnet
+  #   metrics_path: /probe
+  #   params: {module: [icmp_node]}
+  #   static_configs:
+  #     - targets: ["100.87.33.70", "100.101.73.31", "100.92.213.108"]  # control, home, mullvad
+  #   relabel_configs:
+  #     - {source_labels: [__address__], target_label: __param_target}
+  #     - {source_labels: [__param_target], target_label: instance}
+  #     - {target_label: __address__, replacement: "blackbox-exporter:9115"}

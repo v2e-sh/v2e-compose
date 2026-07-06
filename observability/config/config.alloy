@@ -26,7 +26,41 @@ loki.source.docker "default" {
   targets       = discovery.docker.containers.targets
   relabel_rules = discovery.relabel.containers.rules
   labels        = {"job" = "docker"}
-  forward_to    = [loki.write.default.receiver]
+  forward_to    = [loki.process.scrub.receiver]
+}
+
+// Redact secrets BEFORE they persist in Loki. A container that logs a credential
+// (bcrypt hash, bearer token, connection string password, a tailscale auth key)
+// would otherwise sit in plaintext for the whole retention window. These stages
+// rewrite the log line in-flight; the pre-redaction text is never stored.
+loki.process "scrub" {
+  forward_to = [loki.write.default.receiver]
+
+  // Auth-scheme headers FIRST. `Authorization: Bearer <jwt>` must be redacted before
+  // the key=value stage below sees it — that stage's bare-token branch stops at the
+  // space after "Bearer", so on its own it would redact only the scheme word and
+  // LEAK the token. Covers Bearer/Basic/Digest; charset includes base64 (+/=) for Basic.
+  stage.replace {
+    expression = "(?i)(bearer|basic|digest)(\\s+)[A-Za-z0-9._~+/=-]+"
+    replace    = "${1}${2}<redacted>"
+  }
+
+  // key=value / key: value / "key": "value" secrets. Case-insensitive (RE2 supports
+  // (?i); RE2 is linear-time so no backtracking risk). Keeps the key so the line
+  // stays greppable. Group 1 captures the key (with optional surrounding quotes, so
+  // JSON keys like "password": "x" are covered) plus the separator; the value is a
+  // non-capturing group matching a whole quoted string OR a bare token, so
+  // `password="multi word"` redacts fully (not just the first word).
+  stage.replace {
+    expression = "(?i)(\"?(?:password|passwd|pwd|secret|token|api[_-]?key|auth[_-]?key|authorization|access[_-]?key|client[_-]?secret|private[_-]?key)\"?\\s*[:=]\\s*)(?:\"[^\"]*\"|'[^']*'|[^\\s,}]+)"
+    replace    = "${1}<redacted>"
+  }
+
+  // Bare tailscale auth keys (no key= prefix).
+  stage.replace {
+    expression = "(tskey-[a-zA-Z0-9-]+)"
+    replace    = "<redacted-tskey>"
+  }
 }
 
 loki.write "default" {
