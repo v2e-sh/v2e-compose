@@ -1,0 +1,57 @@
+# Vaultwarden — self-hosted Bitwarden-compatible password vault. Zero-knowledge:
+# vault items are encrypted client-side, the server never sees plaintext. The main
+# app + API are NOT behind Authelia forward-auth (the Bitwarden extension/CLI/mobile
+# clients can't complete an interactive Authelia login) — Vaultwarden's own master-
+# password auth is the gate. Only the /admin panel is Authelia-gated (defense in depth
+# on top of ADMIN_TOKEN). DB + keys live in the vaultwarden-data volume = REAL STATE:
+# must be included in the backup/DR work (E2) before anything real is stored here.
+services:
+  vaultwarden:
+    image: vaultwarden/server:1.36.0-alpine
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 192m
+    cpus: 0.5
+    networks:
+      - frontend
+    environment:
+      - DOMAIN=https://vault.${INTERNAL_DOMAIN}
+      # Invite-only: no public signups. Add users via the /admin panel.
+      - SIGNUPS_ALLOWED=false
+      # Rocket on a non-privileged port so cap_drop:[ALL] stays clean (no NET_BIND_SERVICE).
+      - ROCKET_PORT=8080
+      - ADMIN_TOKEN=${VAULTWARDEN_ADMIN_TOKEN:?set via the SOPS-rendered .env (vaultwarden_admin_token)}
+    volumes:
+      - vaultwarden-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/alive || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    labels:
+      - traefik.enable=true
+      # Main app + API + Bitwarden clients — Vaultwarden's own auth, NO forward-auth.
+      - traefik.http.routers.vaultwarden.rule=Host(`vault.${INTERNAL_DOMAIN}`)
+      - traefik.http.routers.vaultwarden.entryPoints=websecure
+      - traefik.http.routers.vaultwarden.tls=true
+      - traefik.http.routers.vaultwarden.priority=10
+      - traefik.http.routers.vaultwarden.middlewares=secure-headers@docker
+      # /admin panel — Authelia-gated on top of the ADMIN_TOKEN. Higher priority so it
+      # wins over the catch-all above.
+      - traefik.http.routers.vaultwarden-admin.rule=Host(`vault.${INTERNAL_DOMAIN}`) && PathPrefix(`/admin`)
+      - traefik.http.routers.vaultwarden-admin.entryPoints=websecure
+      - traefik.http.routers.vaultwarden-admin.tls=true
+      - traefik.http.routers.vaultwarden-admin.priority=20
+      - traefik.http.routers.vaultwarden-admin.middlewares=authelia@docker,secure-headers@docker
+      - traefik.http.services.vaultwarden.loadbalancer.server.port=8080
+
+networks:
+  frontend:
+    external: true
+
+volumes:
+  vaultwarden-data:
