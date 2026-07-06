@@ -267,6 +267,46 @@ services:
       timeout: 5s
       retries: 3
 
+  # ntfy — push notifications for Grafana alerts (E3). Closes the "alerts route
+  # nowhere" gap: Grafana publishes to the v2e-alerts topic over the observability
+  # network (http://ntfy:8080), and the web UI (subscribe/read from a phone or browser)
+  # is exposed at ntfy.int.v2e.sh behind Authelia. Binds :8080 (non-privileged) so it
+  # keeps cap_drop:[ALL] clean.
+  ntfy:
+    image: binwiederhier/ntfy:v2.25.0
+    command: ["serve"]
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 64m
+    cpus: 0.25
+    networks:
+      - observability   # Grafana publishes here
+      - frontend        # Traefik route
+    environment:
+      - NTFY_BASE_URL=https://ntfy.${INTERNAL_DOMAIN}
+      - NTFY_BEHIND_PROXY=true
+      - NTFY_LISTEN_HTTP=:8080
+      - NTFY_CACHE_FILE=/var/lib/ntfy/cache.db
+      - NTFY_CACHE_DURATION=48h
+    volumes:
+      - ntfy-data:/var/lib/ntfy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/v1/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.ntfy.rule=Host(`ntfy.${INTERNAL_DOMAIN}`)
+      - traefik.http.routers.ntfy.entryPoints=websecure
+      - traefik.http.routers.ntfy.tls=true
+      - traefik.http.routers.ntfy.middlewares=authelia@docker,secure-headers@docker
+      - traefik.http.services.ntfy.loadbalancer.server.port=8080
+
 networks:
   frontend:
     external: true
@@ -280,3 +320,4 @@ volumes:
   loki-data:
   alloy-data:
   kuma-data:
+  ntfy-data:
