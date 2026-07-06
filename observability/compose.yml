@@ -71,6 +71,9 @@ services:
       - GF_AUTH_OAUTH_ALLOW_INSECURE_EMAIL_LOOKUP=true
       - GF_AUTH_GENERIC_OAUTH_CLIENT_ID=grafana
       - GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET=${GRAFANA_OIDC_CLIENT_SECRET:?set via the SOPS-rendered .env (authelia_oidc_grafana_client_secret)}
+      # Send a PKCE S256 challenge so the code can't be replayed on the backchannel;
+      # the Authelia grafana client sets require_pkce (Arcane already sends PKCE natively).
+      - GF_AUTH_GENERIC_OAUTH_USE_PKCE=true
       # NO offline_access: Authelia forces an explicit consent screen for that scope
       # regardless of consent_mode (live-verified). On token expiry Grafana just
       # re-runs the instant SSO redirect instead.

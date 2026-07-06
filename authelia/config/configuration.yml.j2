@@ -119,7 +119,8 @@ identity_providers:
         public: false
         authorization_policy: 'one_factor'
         consent_mode: 'implicit'
-        require_pkce: false
+        require_pkce: true
+        pkce_challenge_method: 'S256'
         # Force the groups claim into the id_token (review fix): without this, Authelia only
         # exposes groups at /userinfo and Arcane's arcane-admins->admin mapping silently fails.
         claims_policy: 'with_groups'
@@ -145,7 +146,8 @@ identity_providers:
         public: false
         authorization_policy: 'one_factor'
         consent_mode: 'implicit'
-        require_pkce: false
+        require_pkce: true
+        pkce_challenge_method: 'S256'
         claims_policy: 'with_groups'
         redirect_uris:
           - 'https://grafana.int.v2e.sh/login/generic_oauth'
