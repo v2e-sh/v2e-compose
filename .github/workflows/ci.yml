@@ -39,9 +39,10 @@ jobs:
           SEMAPHORE_RUNNER_REG_TOKEN=dummy
           TAILSCALE_AUTHKEY=dummy
           TECHNITIUM_ADMIN_PASSWORD=dummy
+          VAULTWARDEN_ADMIN_TOKEN=dummy
           EOF
           for stack in arcane authelia mullvad-exit observability rustdesk semaphore \
-                       technitium traefik whoami; do
+                       technitium traefik vaultwarden whoami; do
             echo "::group::$stack"
             docker compose --env-file "$RUNNER_TEMP/ci.env" -f "$stack/compose.yml" config -q
             echo "::endgroup::"
