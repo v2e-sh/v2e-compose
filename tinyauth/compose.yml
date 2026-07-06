@@ -14,10 +14,11 @@ services:
       # --- v2e.sh branding (all non-secret) ---
       # Login-page title (default "Tinyauth") — the brand handle.
       - TINYAUTH_UI_TITLE=v2e.sh
-      # Brand background served from the mounted resources dir. Files there are
-      # exposed at web root, so /background.svg maps to resources/background.svg.
+      # Brand background from the mounted resources dir. TinyAuth serves resource
+      # files under /resources/<name> (verified live: /resources/background.svg
+      # returns the SVG; /background.svg hits the SPA fallback).
       - TINYAUTH_RESOURCES_PATH=/resources
-      - TINYAUTH_UI_BACKGROUNDIMAGE=/background.svg
+      - TINYAUTH_UI_BACKGROUNDIMAGE=/resources/background.svg
       # Forgot-password copy tuned for this lab.
       - TINYAUTH_UI_FORGOTPASSWORDMESSAGE=Contact the admins to reset your access.
     volumes:
