@@ -1,8 +1,8 @@
-# Authelia SSO — PROPOSAL (do not deploy as-is)
+# Authelia SSO — migration record (COMPLETED 2026-07-06)
 
-Replaces TinyAuth's Traefik forward-auth **and** adds an OIDC provider so Arcane and Grafana get real SSO (closes H3 — Arcane's default local password). Drafted + adversarially reviewed against the Authelia **4.39** schema.
+Replaced TinyAuth's Traefik forward-auth **and** added an OIDC provider so Arcane and Grafana get real SSO (closed H3 — Arcane's default local password). Drafted + adversarially reviewed against the Authelia **4.39** schema.
 
-**Status:** draft for review. The stack files (`compose.yml`, `config/`) are here; the app-side + ansible changes below are diffs to apply during migration, not yet applied.
+**Status: DONE.** The migration is fully deployed and verified — TinyAuth is decommissioned and Authelia is the sole auth gate (whoami/traefik-dash/uptime/semaphore on `authelia@docker`; Grafana + Arcane on native OIDC). This document is kept as the historical design + migration record; the live state is described in the docs site and HANDOVER. The diffs below were applied during the cutover.
 
 ## Review verdict: `needs-fixes`
 

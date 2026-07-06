@@ -40,11 +40,12 @@ services:
       # (ARCANE_/GRAFANA_OIDC_CLIENT_SECRET) live in those stacks, added at migration.
     volumes:
       # configuration.yml (with the inlined RS256 key) + users_database.yml are rendered
-      # out-of-band from SOPS by the compose_stack role — no key/hash in git.
-      # config/configuration.yml.j2 is the tracked reference template. They are rendered
-      # into /opt/authelia-secrets (OUTSIDE /opt/v2e-compose) so the Arcane container,
-      # which bind-mounts the whole compose tree and starts as root, cannot read the IdP
-      # signing key. This absolute path must match the role's authelia_secrets_dir default.
+      # out-of-band from SOPS by the compose_stack role (authoritative template:
+      # v2e-ansible/roles/compose_stack/templates/authelia-configuration.yml.j2; see
+      # config/README.md) — no key/hash in git. They are rendered into /opt/authelia-secrets
+      # (OUTSIDE /opt/v2e-compose) so the Arcane container, which bind-mounts the whole
+      # compose tree and starts as root, cannot read the IdP signing key. This absolute
+      # path must match the role's authelia_secrets_dir default.
       - /opt/authelia-secrets/configuration.yml:/config/configuration.yml:ro
       - /opt/authelia-secrets/users_database.yml:/config/users_database.yml:ro
       # Writable state (sqlite db + filesystem notifier). Named volume, not a git-tracked
