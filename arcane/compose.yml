@@ -1,6 +1,14 @@
 services:
   arcane:
     image: ghcr.io/getarcaneapp/manager:v2.3.0
+    cap_drop:
+      - ALL
+    cap_add:  # starts root, chowns volumes, self-drops (setuid) to 65532
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETUID
+      - SETGID
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true

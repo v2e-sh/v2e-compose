@@ -15,6 +15,8 @@
 services:
   gluetun:
     image: qmcgaw/gluetun:v3.41.1
+    cap_drop:
+      - ALL
     restart: unless-stopped
     # no-new-privileges is compatible with cap_add: the NET_ADMIN cap is granted at
     # start; this only blocks setuid escalation, which gluetun never uses.
@@ -48,6 +50,8 @@ services:
 
   tailscale:
     image: tailscale/tailscale:v1.98.4
+    cap_drop:
+      - ALL
     restart: unless-stopped
     # Userspace (netstack) mode needs no caps, so no-new-privileges is safe here.
     security_opt:

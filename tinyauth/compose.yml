@@ -1,6 +1,8 @@
 services:
   tinyauth:
     image: ghcr.io/steveiliop56/tinyauth:v5.0.7
+    cap_drop:
+      - ALL
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true

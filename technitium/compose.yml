@@ -5,6 +5,10 @@
 services:
   technitium:
     image: technitium/dns-server:15.2.0
+    cap_drop:
+      - ALL
+    cap_add:  # bind :53
+      - NET_BIND_SERVICE
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true

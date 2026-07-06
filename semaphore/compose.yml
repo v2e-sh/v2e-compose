@@ -1,6 +1,14 @@
 services:
   postgres:
     image: postgres:18.4-alpine
+    cap_drop:
+      - ALL
+    cap_add:  # entrypoint chowns PGDATA then su-exec to postgres
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -25,6 +33,8 @@ services:
 
   semaphore:
     image: semaphoreui/semaphore:v2.18.14
+    cap_drop:
+      - ALL
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true

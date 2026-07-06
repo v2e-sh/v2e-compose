@@ -6,6 +6,8 @@
 services:
   prometheus:
     image: prom/prometheus:v3.13.0
+    cap_drop:
+      - ALL
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -28,6 +30,8 @@ services:
 
   grafana:
     image: grafana/grafana:13.0.3
+    cap_drop:
+      - ALL
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -63,6 +67,8 @@ services:
 
   loki:
     image: grafana/loki:3.7.3
+    cap_drop:
+      - ALL
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -82,6 +88,8 @@ services:
 
   alloy:
     image: grafana/alloy:v1.17.1
+    cap_drop:
+      - ALL
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -109,6 +117,8 @@ services:
 
   uptime-kuma:
     image: louislam/uptime-kuma:2.4.0-slim
+    cap_drop:
+      - ALL
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -140,15 +150,15 @@ services:
   # Uptime Kuma click-ops — the whole probe set lives in git.
   blackbox-exporter:
     image: quay.io/prometheus/blackbox-exporter:v0.27.0
+    cap_drop:
+      - ALL
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
     mem_limit: 32m
     cpus: 0.25
-    # ICMP probes to tailnet peers need the raw-socket capability and a route onto the
-    # tailnet — the services host reaches 100.x via control's advertised subnet route.
-    cap_add:
-      - NET_RAW
+    # NET_RAW is only needed for ICMP probes (the blackbox-tailnet job in prometheus.yml
+    # is commented out). Re-add cap_add: [NET_RAW] here if that job is ever enabled.
     # frontend too (like prometheus): the cert/DNS probes must egress to the VLAN
     # (traefik 10.1.2.10, Technitium 10.1.0.10), not stay on the isolated obs bridge.
     networks:
@@ -164,6 +174,8 @@ services:
 
   node-exporter:
     image: prom/node-exporter:v1.11.1
+    cap_drop:
+      - ALL
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -177,6 +189,10 @@ services:
 
   cadvisor:
     image: ghcr.io/google/cadvisor:v0.60.3
+    cap_drop:
+      - ALL
+    cap_add:  # read /dev/kmsg (host dmesg_restrict) for OOM/kernel events
+      - SYSLOG
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
