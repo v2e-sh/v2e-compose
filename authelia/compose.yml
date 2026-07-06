@@ -1,0 +1,67 @@
+services:
+  authelia:
+    image: docker.io/authelia/authelia:4.39.20
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+    cpus: 0.25
+    networks:
+      - frontend
+    environment:
+      # Portal + cookie host is baked into configuration.yml (static, mounted RO).
+      - TZ=UTC
+      # --- Secrets: injected via env override (SOPS-rendered ../.env). These keys are
+      #     intentionally ABSENT from configuration.yml — Authelia refuses to start if a
+      #     secret is defined in BOTH the env and the YAML. ---
+      - AUTHELIA_SESSION_SECRET=${AUTHELIA_SESSION_SECRET:?set via the SOPS-rendered .env (authelia_session_secret)}
+      - AUTHELIA_STORAGE_ENCRYPTION_KEY=${AUTHELIA_STORAGE_ENCRYPTION_KEY:?set via the SOPS-rendered .env (authelia_storage_encryption_key)}
+      - AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET=${AUTHELIA_RESET_PASSWORD_JWT_SECRET:?set via the SOPS-rendered .env (authelia_reset_password_jwt_secret)}
+      # --- OIDC provider secrets ---
+      - AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET=${AUTHELIA_OIDC_HMAC_SECRET:?set via the SOPS-rendered .env (authelia_oidc_hmac_secret)}
+      # RS256 issuer private key (multiline PEM) — cannot live in an env-file, so it is a
+      # mounted, gitignored file provisioned out-of-band by SOPS/Ansible (see ./config/secrets/).
+      - AUTHELIA_IDENTITY_PROVIDERS_OIDC_JWKS_0_KEY_FILE=/config/secrets/oidc.issuer.pem
+      # Per-client HASHED secrets (pbkdf2-sha512). Index MUST match the clients order in
+      # configuration.yml: 0 = arcane, 1 = grafana. The PLAINTEXT of these lives in the
+      # arcane/grafana stacks (ARCANE_OIDC_CLIENT_SECRET / GRAFANA_OIDC_CLIENT_SECRET).
+      - AUTHELIA_IDENTITY_PROVIDERS_OIDC_CLIENTS_0_CLIENT_SECRET=${AUTHELIA_OIDC_ARCANE_CLIENT_SECRET_HASH:?set via the SOPS-rendered .env (authelia_oidc_arcane_client_secret_hash)}
+      - AUTHELIA_IDENTITY_PROVIDERS_OIDC_CLIENTS_1_CLIENT_SECRET=${AUTHELIA_OIDC_GRAFANA_CLIENT_SECRET_HASH:?set via the SOPS-rendered .env (authelia_oidc_grafana_client_secret_hash)}
+    volumes:
+      - ./config/configuration.yml:/config/configuration.yml:ro
+      - ./config/users_database.yml:/config/users_database.yml:ro
+      # SOPS-provisioned, gitignored. Holds oidc.issuer.pem (RS256 private key).
+      - ./config/secrets:/config/secrets:ro
+      # Writable state (sqlite db + filesystem notifier). Named volume, not a git-tracked
+      # bind, mirroring the observability stack's non-root named-volume convention.
+      - authelia-data:/data
+    # Authelia's image already declares its own HEALTHCHECK (server.disable_healthcheck is
+    # false in configuration.yml, so it stays active) — the binary health probe hits
+    # :9091/api/health internally. No override needed; the built-in check drives restarts.
+    labels:
+      - traefik.enable=true
+      # Public portal router — NO forward-auth middleware (it cannot gate its own login),
+      # exactly like the old tinyauth router. OIDC endpoints live under this host too.
+      - traefik.http.routers.authelia.rule=Host(`auth.${INTERNAL_DOMAIN}`)
+      - traefik.http.routers.authelia.entryPoints=websecure
+      - traefik.http.routers.authelia.tls=true
+      - traefik.http.routers.authelia.middlewares=secure-headers@docker
+      - traefik.http.services.authelia.loadbalancer.server.port=9091
+      # Forward-auth middleware consumed by protected apps as `authelia@docker`.
+      # Differences vs the old `auth`(tinyauth) middleware: endpoint /api/authz/forward-auth,
+      # port 9091, and trustForwardHeader=true is REQUIRED (Authelia builds the login
+      # redirect from X-Forwarded-*). authResponseHeaders are byte-identical to tinyauth's,
+      # so apps consuming Remote-* keep working unchanged.
+      - traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/authz/forward-auth
+      - traefik.http.middlewares.authelia.forwardauth.trustForwardHeader=true
+      - traefik.http.middlewares.authelia.forwardauth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Email,Remote-Name
+
+networks:
+  frontend:
+    external: true
+
+volumes:
+  # Non-git-tracked writable state (Authelia writes db.sqlite3 + notification.txt here).
+  authelia-data:

@@ -1,0 +1,19 @@
+---
+# Authelia file auth backend — TEMPLATE. Replace the password hash before deploy:
+#   docker run --rm authelia/authelia:4.39.20 \
+#     authelia crypto hash generate argon2 --password 'CHANGE_ME'
+# Groups here drive OIDC role mapping: `arcane-admins` -> Arcane role_admin,
+# `grafana-admins`/`grafana-editors` -> Grafana Admin/Editor (see those stacks).
+# Do NOT commit a real hash for a real account to a shared repo.
+users:
+  admin:
+    disabled: false
+    displayname: 'v2e Admin'
+    # argon2id PLACEHOLDER — replace with your own generated hash.
+    password: '$argon2id$v=19$m=65536,t=3,p=4$REPLACE_WITH_SALT$REPLACE_WITH_HASH'
+    email: 'admin@v2e.sh'
+    groups:
+      - 'admins'
+      - 'arcane-admins'
+      - 'grafana-admins'
+...

@@ -1,0 +1,156 @@
+---
+# Authelia 4.39 — v2e lab. STATIC file, mounted read-only. Secrets are NOT in this file:
+# they are injected via AUTHELIA_* env overrides from the SOPS-rendered ../.env (Authelia
+# refuses to start if the same secret is set in both env and YAML). Each omission is marked.
+
+server:
+  address: 'tcp://:9091/'
+  # Leave the built-in healthcheck active (homelab, not a restrictive K8s env).
+  disable_healthcheck: false
+
+log:
+  level: 'info'
+  format: 'text'
+
+totp:
+  issuer: 'auth.int.v2e.sh'
+  algorithm: 'sha1'
+  digits: 6
+  period: 30
+  skew: 1
+
+authentication_backend:
+  password_reset:
+    disable: false
+  file:
+    path: '/config/users_database.yml'
+    password:
+      algorithm: 'argon2'
+      argon2:
+        variant: 'argon2id'
+        iterations: 3
+        memory: 65536
+        parallelism: 4
+        key_length: 32
+        salt_length: 16
+
+session:
+  # secret: injected via AUTHELIA_SESSION_SECRET
+  # Single-domain, single-node: NO redis block -> Authelia uses the in-memory session
+  # provider automatically (sessions drop on container restart -> re-login; acceptable).
+  cookies:
+    - domain: 'int.v2e.sh'
+      authelia_url: 'https://auth.int.v2e.sh'
+      default_redirection_url: 'https://whoami.int.v2e.sh'
+  expiration: '1 hour'
+  inactivity: '15 minutes'
+  remember_me: '1 month'
+
+storage:
+  # encryption_key: injected via AUTHELIA_STORAGE_ENCRYPTION_KEY
+  local:
+    path: '/data/db.sqlite3'
+
+notifier:
+  disable_startup_check: false
+  # Homelab: write reset/2FA-registration links to a file (no SMTP). Read them with:
+  #   docker compose exec authelia cat /data/notification.txt
+  filesystem:
+    filename: '/data/notification.txt'
+
+identity_validation:
+  reset_password:
+    # jwt_secret: injected via AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET
+    # (this replaced the old top-level `jwt_secret` key in 4.38+).
+    jwt_lifespan: '5 minutes'
+    jwt_algorithm: 'HS256'
+
+access_control:
+  # Drop-in for TinyAuth (which was single-factor). Default deny; the portal bypasses
+  # itself; everything else on the internal domain requires one_factor. Raise sensitive
+  # hosts (e.g. traefik dashboard, arcane) to two_factor once TOTP is enrolled.
+  default_policy: 'deny'
+  rules:
+    - domain: 'auth.int.v2e.sh'
+      policy: 'bypass'
+    - domain: '*.int.v2e.sh'
+      policy: 'one_factor'
+
+identity_providers:
+  oidc:
+    # hmac_secret: injected via AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET
+    jwks:
+      # key: injected via AUTHELIA_IDENTITY_PROVIDERS_OIDC_JWKS_0_KEY_FILE
+      # (mounted /config/secrets/oidc.issuer.pem). At least one RS256 sig key is mandatory.
+      - key_id: 'main'
+        algorithm: 'RS256'
+        use: 'sig'
+    lifespans:
+      access_token: '1h'
+      authorize_code: '1m'
+      id_token: '1h'
+      refresh_token: '90m'
+    enforce_pkce: 'public_clients_only'
+    # Claims policy so the `groups` (+ user) claims are embedded in the ID token / userinfo.
+    # Grafana's generic-oauth does not request claims the standard way, so it needs this.
+    claims_policies:
+      with_groups:
+        id_token:
+          - 'groups'
+          - 'email'
+          - 'email_verified'
+          - 'preferred_username'
+          - 'name'
+    clients:
+      # --- index 0: ARCANE (secret hash injected via ..._CLIENTS_0_CLIENT_SECRET) ---
+      - client_id: 'arcane'
+        client_name: 'Arcane'
+        # client_secret: injected via AUTHELIA_IDENTITY_PROVIDERS_OIDC_CLIENTS_0_CLIENT_SECRET
+        public: false
+        authorization_policy: 'one_factor'
+        consent_mode: 'implicit'
+        require_pkce: false
+        # Force the groups claim into the id_token (review fix): without this, Authelia only
+        # exposes groups at /userinfo and Arcane's arcane-admins->admin mapping silently fails.
+        claims_policy: 'with_groups'
+        redirect_uris:
+          - 'https://arcane.int.v2e.sh/auth/oidc/callback'
+        scopes:
+          - 'openid'
+          - 'profile'
+          - 'email'
+          - 'groups'
+        grant_types:
+          - 'authorization_code'
+          - 'refresh_token'
+        response_types:
+          - 'code'
+        response_modes:
+          - 'query'
+        token_endpoint_auth_method: 'client_secret_basic'
+      # --- index 1: GRAFANA (secret hash injected via ..._CLIENTS_1_CLIENT_SECRET) ---
+      - client_id: 'grafana'
+        client_name: 'Grafana'
+        # client_secret: injected via AUTHELIA_IDENTITY_PROVIDERS_OIDC_CLIENTS_1_CLIENT_SECRET
+        public: false
+        authorization_policy: 'one_factor'
+        consent_mode: 'implicit'
+        require_pkce: false
+        claims_policy: 'with_groups'
+        redirect_uris:
+          - 'https://grafana.int.v2e.sh/login/generic_oauth'
+        scopes:
+          - 'openid'
+          - 'profile'
+          - 'email'
+          - 'groups'
+          - 'offline_access'
+        grant_types:
+          - 'authorization_code'
+          - 'refresh_token'
+        response_types:
+          - 'code'
+        response_modes:
+          - 'query'
+        token_endpoint_auth_method: 'client_secret_basic'
+...
