@@ -13,7 +13,7 @@ users:
     password: '$argon2id$v=19$m=65536,t=3,p=4$REPLACE_WITH_SALT$REPLACE_WITH_HASH'
     # Must match the app-side account for email-based SSO linking (Grafana links the
     # OIDC identity to its local admin by email — see observability/compose.yml).
-    email: 'admin@int.v2e.sh'
+    email: 'admin@int.example.com'
     groups:
       - 'admins'
       - 'arcane-admins'
