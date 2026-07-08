@@ -101,6 +101,12 @@ services:
       - GF_AUTH_GENERIC_OAUTH_AUTH_STYLE=InHeader
       # NOT enabling GF_AUTH_OAUTH_AUTO_LOGIN: the login form stays reachable so the
       # break-glass admin account keeps working.
+      # Backup notification channel: alerting.yaml's "critical-multi" contact point
+      # reads this via Grafana's own provisioning env-var expansion (${VAR} syntax,
+      # confirmed against grafana.com/docs/grafana/latest/alerting/set-up/
+      # provision-alerting-resources/file-provisioning) so ntfy being down doesn't
+      # silently drop critical alerts.
+      - DISCORD_WEBHOOK_URL=${GRAFANA_DISCORD_WEBHOOK_URL:?set via the SOPS-rendered .env (grafana_discord_webhook_url)}
     volumes:
       - ./config/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
       - ./config/grafana-alerting.yaml:/etc/grafana/provisioning/alerting/alerting.yaml:ro
