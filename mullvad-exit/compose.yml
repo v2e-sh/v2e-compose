@@ -56,6 +56,16 @@ services:
     # Shares gluetun's netns; reverted with gluetun to the known-good exit config
     # (the stack is verified as a unit — see the gluetun cap note above).
     restart: unless-stopped
+    # cap_drop:[ALL], no cap_add — unlike gluetun, this one DOES conform to the
+    # fleet-wide baseline. Verified against tailscaled's containerboot source
+    # (cmd/containerboot/main.go): ensureIPForwarding(), the only place that would
+    # need NET_ADMIN (it writes net.ipv4.ip_forward/net.ipv6 sysctls), is gated on
+    # `!cfg.UserspaceMode` and is skipped entirely when TS_USERSPACE=true — even
+    # with --advertise-exit-node set. Netstack mode re-emits traffic as ordinary
+    # sockets in the shared netns (see TS_USERSPACE note below), so no kernel
+    # tuntap/iptables/forwarding capability is ever touched on this container.
+    cap_drop:
+      - ALL
     # Userspace (netstack) mode needs no caps, so no-new-privileges is safe here.
     security_opt:
       - no-new-privileges:true
