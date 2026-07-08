@@ -239,10 +239,17 @@ groups:
         annotations:
           summary: "auth.int.v2e.sh is not returning HTTP 200 — the login portal is broken"
 
-# --- Contact point + default policy (E3): route every alert to the self-hosted ntfy
-# (previously the rules fired into the void). Grafana POSTs its alert JSON to the
-# v2e-alerts topic over the observability network; subscribe from a phone/browser at
+# --- Contact points + policy (E3, extended charter 2026-07-07): route every
+# alert to the self-hosted ntfy by default (previously the rules fired into
+# the void). Grafana POSTs its alert JSON to the v2e-alerts topic over the
+# observability network; subscribe from a phone/browser at
 # https://ntfy.int.v2e.sh (Authelia-gated) -> topic "v2e-alerts".
+#
+# ntfy is a single point of failure for the notification path itself — a
+# severity:critical alert (auth portal down, cert expiring imminently) needs
+# a channel that doesn't depend on the same estate it's warning about. The
+# "critical-multi" contact point below fans critical alerts to BOTH ntfy and
+# Discord; everything else stays ntfy-only via the default/root policy.
 contactPoints:
   - orgId: 1
     name: ntfy
@@ -254,6 +261,26 @@ contactPoints:
           httpMethod: POST
         disableResolveMessage: false
 
+  - orgId: 1
+    name: critical-multi
+    receivers:
+      - uid: ntfy-critical
+        type: webhook
+        settings:
+          url: http://ntfy:8080/v2e-alerts
+          httpMethod: POST
+        disableResolveMessage: false
+      # ${DISCORD_WEBHOOK_URL} is Grafana's own provisioning env-var expansion
+      # (not docker-compose interpolation — this file is a static bind mount,
+      # not passed through compose's ${VAR} substitution). Confirmed syntax
+      # against grafana.com/docs/grafana/latest/alerting/set-up/
+      # provision-alerting-resources/file-provisioning.
+      - uid: discord-critical
+        type: discord
+        settings:
+          url: ${DISCORD_WEBHOOK_URL}
+        disableResolveMessage: false
+
 policies:
   - orgId: 1
     receiver: ntfy
@@ -261,3 +288,12 @@ policies:
     group_wait: 30s
     group_interval: 5m
     repeat_interval: 4h
+    routes:
+      - receiver: critical-multi
+        matchers:
+          - severity = critical
+        group_by: ['grafana_folder', 'alertname']
+        group_wait: 30s
+        group_interval: 5m
+        repeat_interval: 4h
+        continue: false
