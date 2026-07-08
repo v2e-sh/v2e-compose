@@ -67,11 +67,17 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     labels:
       - traefik.enable=true
-      # Reusable security-headers middleware (HSTS omitted until prod cert).
+      # Reusable security-headers middleware. HSTS: prod cert is live, land
+      # stsSeconds at a short TTL first (e.g. 300) to confirm no mixed-content
+      # or cert issues across every vhost for a day or two, THEN bump to the
+      # 1y value below — HSTS is effectively unrecoverable client-side within
+      # its max-age, so this is not a change to roll straight to 1y blind.
       - traefik.http.middlewares.secure-headers.headers.frameDeny=true
       - traefik.http.middlewares.secure-headers.headers.contentTypeNosniff=true
       - traefik.http.middlewares.secure-headers.headers.browserXssFilter=true
       - traefik.http.middlewares.secure-headers.headers.referrerPolicy=strict-origin-when-cross-origin
+      - traefik.http.middlewares.secure-headers.headers.stsSeconds=31536000
+      - traefik.http.middlewares.secure-headers.headers.stsIncludeSubdomains=true
       # Dashboard router — PROTECTED, and it now carries the wildcard anchor (moved off whoami).
       - traefik.http.routers.dashboard.rule=Host(`traefik.${INTERNAL_DOMAIN}`)
       - traefik.http.routers.dashboard.entryPoints=websecure
