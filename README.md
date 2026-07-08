@@ -2,7 +2,10 @@
 
 The application layer of the v2e lab: Docker Compose stacks fronted by **Traefik v3**,
 which terminates TLS using **Let's Encrypt** wildcard certs obtained over the **Cloudflare
-DNS-01** challenge (no inbound ports). COMPOSE-1 ships Traefik + a `whoami` test service.
+DNS-01** challenge (no inbound ports). COMPOSE-1 shipped Traefik + a `whoami` test
+service; the estate has since grown to Authelia SSO, Semaphore, Arcane, the
+observability stack, Vaultwarden, Technitium DNS, a RustDesk relay, and a Mullvad
+exit node.
 
 ## Layout
 
@@ -12,15 +15,25 @@ Each service is its own Compose project in its own folder, all sharing one exter
 ```
 traefik/compose.yml         Traefik (edge, TLS, routing)
 traefik/data/certs/         ACME storage (acme-staging.json / acme.json), 0600, gitignored
-whoami/compose.yml          test service proving the cert path
-.env / .env.example         non-secret config (DOMAIN, ACME_EMAIL, CERT_RESOLVER)
-secrets.sops.yaml(.example) the one secret (CF_DNS_API_TOKEN), SOPS-encrypted
-Makefile                    local bootstrap + deploy
+whoami/compose.yml          canary service, gated by Authelia (SSO-2)
+authelia/compose.yml        Authelia SSO — forward-auth + OIDC provider (COMPOSE-2)
+semaphore/compose.yml       Semaphore + Postgres — automation UI (COMPOSE-3)
+arcane/compose.yml          Arcane — Docker management UI, behind a docker-socket-proxy
+observability/compose.yml   Prometheus, Grafana, Loki, Alloy, Uptime Kuma, ntfy
+vaultwarden/compose.yml     Vaultwarden — password manager
+technitium/compose.yml      Technitium — internal DNS (infra node)
+rustdesk/compose.yml        RustDesk relay (infra node)
+mullvad-exit/compose.yml    Mullvad exit node (gluetun + tailscale sidecar)
+.env / .env.example         non-secret config (DOMAIN, INTERNAL_DOMAIN, ACME_EMAIL, CERT_RESOLVER, ...)
+secrets.sops.yaml(.example) SOPS-encrypted secrets (CF_DNS_API_TOKEN + per-stack keys)
+Makefile                    local bootstrap + deploy (traefik + whoami only)
 ```
 
-**Networks — two tiers.** `frontend` = edge (Traefik ↔ routed services). `backend`
-(`internal: true`, no egress) is the data tier for stateful services and arrives in
-COMPOSE-3 (Semaphore ↔ Postgres); COMPOSE-1 only needs `frontend`.
+**Networks.** `frontend` (external) is the shared edge network every Traefik-routed
+service joins. Stateful/backend services get their own per-stack internal network
+instead of one shared tier — e.g. `semaphore-internal` (Semaphore ↔ Postgres,
+COMPOSE-3) and `arcane-internal` (Arcane ↔ its docker-socket-proxy), both
+`internal: true`, no egress. COMPOSE-1 only needs `frontend`.
 
 ## Prerequisites
 
@@ -44,54 +57,55 @@ make logs               # watch the ACME order complete
 Test (point the host at your Docker host if there's no public record):
 
 ```bash
-echo "127.0.0.1 whoami.v2e.sh" | sudo tee -a /etc/hosts   # local test only
-curl -vk https://whoami.v2e.sh     # whoami body; issuer = (STAGING) Let's Encrypt
-curl -I  http://whoami.v2e.sh      # 301 -> https
+echo "127.0.0.1 whoami.int.v2e.sh" | sudo tee -a /etc/hosts   # local test only
+curl -vk https://whoami.int.v2e.sh     # issuer = (STAGING) Let's Encrypt
+curl -I  http://whoami.int.v2e.sh      # 301 -> https
 ```
+
+`whoami`'s router now carries `middlewares=authelia@docker,secure-headers@docker`
+(it's the SSO-2 canary app), so a plain `curl` against the deployed lab gets
+redirected into the Authelia login rather than the whoami body — the TLS/redirect
+checks above still validate the cert path.
 
 When staging looks good, flip to the real CA:
 
 ```bash
 make prod               # CERT_RESOLVER=production; production resolver, separate acme.json
-curl -v https://whoami.v2e.sh      # no -k; issuer = Let's Encrypt
+curl -v https://whoami.int.v2e.sh      # no -k; issuer = Let's Encrypt
 ```
 
 Rollback is instant — `CERT_RESOLVER=staging` again (the two resolvers keep separate
 storage, so neither flip wipes the other).
 
-## Authentication (TinyAuth)
+## Authentication (Authelia)
 
-COMPOSE-2 puts a TinyAuth forward-auth layer in front of protected services.
+COMPOSE-2/SSO-2 put an Authelia forward-auth (+ OIDC) layer in front of protected
+services, replacing the original TinyAuth design (migrated 2026-07-06).
 
-- **Protected:** the Traefik dashboard — `https://traefik.v2e.sh` (behind login).
-- **Public:** `whoami.v2e.sh` and the TinyAuth login page `tinyauth.v2e.sh`.
-- **SSO:** the session cookie is set on `.v2e.sh`, so one login covers every protected
-  `*.v2e.sh` subdomain (COMPOSE-3's services inherit it).
+- **Protected:** the Traefik dashboard (`https://traefik.int.v2e.sh`), `whoami` (the
+  SSO-2 canary app), Uptime Kuma, Semaphore, ntfy, and Vaultwarden's `/admin` path.
+- **Public by design:** Authelia's own portal, `https://auth.int.v2e.sh` — a
+  forward-auth service cannot gate its own login.
+- **SSO:** the session cookie is set on `.int.v2e.sh`, so one login covers every
+  protected `*.int.v2e.sh` subdomain.
 
-### Create a user
+### Creating the admin user
 
-The user lives in `secrets.sops.yaml` (edit with `sops secrets.sops.yaml`):
+Authelia's crypto material (RS256 issuer key, the admin argon2id hash, per-client
+OIDC pbkdf2 hashes, `configuration.yml`) is not env-injected like the old TinyAuth
+user store — it's rendered by the Ansible role (`roles/compose_stack`) from the
+SOPS-managed group_vars, which is why `make up`'s local/standalone path (below)
+does not deploy Authelia at all. Generate the random secrets with:
 
 ```bash
-docker run --rm -it ghcr.io/steveiliop56/tinyauth:v5.0.7 user create   # -> TINYAUTH_AUTH_USERS (user:bcrypt)
+docker run --rm authelia/authelia:4.39.20 authelia crypto rand --length 64 --charset alphanumeric
 ```
-
-`make up` deploys tinyauth alongside traefik/whoami. Then:
-
-- `https://traefik.v2e.sh` → redirected to the TinyAuth login → valid creds → dashboard.
-- `https://whoami.v2e.sh` → loads with no prompt (public).
 
 ### Protecting another service
 
-Add one label to its router: `traefik.http.routers.<name>.middlewares=auth@docker`
+Add one label to its router: `traefik.http.routers.<name>.middlewares=authelia@docker`
 (chain with `secure-headers@docker` as needed). The login page must **never** carry
-`auth` — it cannot gate itself.
-
-### Swapping to Authelia later
-
-The middleware is named `auth` (not `tinyauth`) on purpose: replace the tinyauth stack with
-Authelia (+ Valkey), define a middleware also named `auth` pointing at Authelia's verify
-endpoint, and every protected router (`middlewares=auth@docker`) keeps working unchanged.
+`authelia` — it cannot gate itself.
 
 ## How variables reach the container
 
@@ -109,8 +123,8 @@ source is pluggable:
 
 ## Cloudflare / DNS-01 notes
 
-- **Wildcard:** one `v2e.sh` + `*.v2e.sh` cert (anchored on the whoami router in COMPOSE-1;
-  re-anchored onto the authenticated dashboard router in COMPOSE-2).
+- **Wildcard:** one `int.v2e.sh` + `*.int.v2e.sh` cert (anchored on the whoami router in
+  COMPOSE-1; re-anchored onto the authenticated dashboard router in COMPOSE-2).
 - **Gray-cloud:** any *public* A/AAAA record for an internal service must be **DNS-only (gray cloud)** — orange-cloud serves Cloudflare's edge cert, not LE, and can't reach a private IP. The `lab.v2e.sh` tunnel record stays proxied (different record).
 - DNS-01 needs **no** inbound ports and no public record for the cert itself.
 - The propagation pre-check is pinned to `1.1.1.1:53,1.0.0.1:53` to avoid split-horizon DNS.
@@ -119,20 +133,21 @@ source is pluggable:
 
 ## Security posture (COMPOSE-1) and the hardening backlog
 
-Applied now: `no-new-privileges` on every service; read-only `docker.sock`;
-`exposedByDefault=false`; exact image tags; non-HSTS security headers.
+Applied now: `no-new-privileges` and `cap_drop: ALL` (+ `NET_BIND_SERVICE` where a
+service needs to bind a privileged port) estate-wide; read-only `docker.sock` on
+Traefik; `exposedByDefault=false`; exact image tags; full security headers including
+HSTS (1y, `includeSubDomains`) now that the production cert is live.
 
 **Caveat — `:ro` on `docker.sock` is largely cosmetic:** it makes the socket *file*
 read-only but does not stop Docker API writes over it. Real protection is the socket-proxy
-below.
+below. Arcane already goes through `tecnativa/docker-socket-proxy`; Traefik does not yet.
 
 **COMPOSE-1.x hardening (deferred, all additive):**
-- `tecnativa/docker-socket-proxy` (Traefik talks to a read-only proxy; the real socket
-  never touches Traefik) — removes the caveat above.
-- `cap_drop: ALL` (+ `NET_BIND_SERVICE` for Traefik), read-only root FS + `tmpfs`.
+- `tecnativa/docker-socket-proxy` in front of Traefik's `docker.sock` mount (Arcane
+  already uses this pattern) — removes the caveat above.
+- Read-only root FS + `tmpfs` (currently only the Arcane socket-proxy container runs
+  `read_only: true`).
 - Image digest pins (on top of the current tags).
-- **HSTS** on the `secure-headers` middleware — only after a production cert is active
-  (HSTS + a staging cert makes the cert warning un-bypassable).
 
 ## How the lab deploys this (ANS-3)
 
